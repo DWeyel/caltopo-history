@@ -1,0 +1,25 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+{% extends "base.html" %}
+{% block title %}{{ t('sign_in') }} · CalTopo History{% endblock %}
+{% block content %}
+<section class="card login-card">
+  <h1>CalTopo History v{{ app_version }}</h1>
+  <p class="muted">{{ t('sign_in') }}</p>
+  {% if settings.cookie_secure and request.url.scheme != 'https' %}
+    <div class="alert danger">
+      {% if language == 'de' %}
+        Sichere Session-Cookies sind aktiviert (<code>COOKIE_SECURE=true</code>), diese Seite wird aber über HTTP aufgerufen. Eine Anmeldung kann so nicht dauerhaft funktionieren, weil Browser Secure-Cookies nicht über HTTP senden. Verwende HTTPS oder setze <code>COOKIE_SECURE=false</code> ausschließlich für eine temporäre lokale/Test-Installation.
+      {% else %}
+        Secure session cookies are enabled (<code>COOKIE_SECURE=true</code>), but this page is being accessed over HTTP. Login sessions cannot persist because browsers do not send Secure cookies over HTTP. Use HTTPS, or set <code>COOKIE_SECURE=false</code> only for a temporary local/test deployment.
+      {% endif %}
+    </div>
+  {% endif %}
+  {% if error %}<div class="alert danger">{{ error }}</div>{% endif %}
+  <form method="post" action="/login" class="stack">
+    <label>{{ t('username') }}<input name="username" autocomplete="username" required></label>
+    <label>{{ t('password') }}<input type="password" name="password" autocomplete="current-password" required></label>
+    <button type="submit">{{ t('sign_in') }}</button>
+  </form>
+</section>
+{% endblock %}

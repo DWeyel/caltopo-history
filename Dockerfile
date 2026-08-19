@@ -3,7 +3,7 @@
 FROM python:3.11-slim-bookworm
 
 LABEL org.opencontainers.image.title="CalTopo History" \
-      org.opencontainers.image.version="0.9" \
+      org.opencontainers.image.version="0.10" \
       org.opencontainers.image.source="https://github.com/DWeyel/caltopo-history" \
       org.opencontainers.image.licenses="AGPL-3.0-only"
 
@@ -28,7 +28,7 @@ COPY LICENSE THIRD-PARTY-NOTICES.md /app/
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # The original connector import stored the common v0.8 UI bundle as an archive.
-# Extract it first, then overlay directly browsable v0.9 files from app/.
+# Extract it first, then overlay directly browsable current files from app/.
 COPY support/ui-assets-v0.8.tar.gz /tmp/ui-assets-v0.8.tar.gz
 RUN tar -xzf /tmp/ui-assets-v0.8.tar.gz -C /app && rm -f /tmp/ui-assets-v0.8.tar.gz
 COPY app /app/app

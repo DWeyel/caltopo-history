@@ -1,0 +1,23 @@
+# Optional standalone HTTPS overlay.
+# Usage: docker compose -f compose.yaml -f compose.https.yaml up -d --build
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caltopo-history-caddy
+    restart: unless-stopped
+    depends_on:
+      - caltopo-history
+    environment:
+      DOMAIN: "${DOMAIN:?Set DOMAIN in .env for standalone HTTPS}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

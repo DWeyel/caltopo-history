@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: caltopo-history:0.9
+    image: caltopo-history:0.10
     container_name: caltopo-history
     restart: unless-stopped
     environment:
@@ -33,6 +33,7 @@ services:
     tmpfs:
       - /tmp:size=64m,mode=1777
     stop_grace_period: 30s
+
 volumes:
   caltopo_history_data:
     name: "${DATA_VOLUME_NAME:-caltopo_history_data}"

@@ -1,14 +1,69 @@
 name: Test and license audit
 
 on:
+  push:
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+  statuses: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-24.04
+    env:
+      DATABASE_URL: sqlite:////tmp/caltopo-history-ci.db
     steps:
-      - name: CI maintenance pause
-        run: echo "Automatic CI is temporarily paused while historical test fixtures are normalized."
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Restore legacy support bundle and re-apply current source
+        run: |
+          tar -xzf support/ui-assets-v0.8.tar.gz
+          tar -xzf support/tests-v0.8.tar.gz
+          git checkout -- app/templates/base.html app/templates/map_picker.html app/templates/snapshot.html app/templates/login.html tests
+
+      - name: Create clean virtual environment
+        run: python -m venv .venv
+
+      - name: Install runtime dependencies
+        run: |
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Audit resolved runtime licenses
+        run: |
+          . .venv/bin/activate
+          python scripts/check_dependency_licenses.py
+
+      - name: Install test dependency
+        run: |
+          . .venv/bin/activate
+          python -m pip install pytest
+
+      - name: Run tests
+        run: |
+          . .venv/bin/activate
+          pytest -q
+
+      - name: Publish workflow status bridge
+        if: ${{ always() && github.event_name != 'pull_request' }}
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/publish_commit_status.py \
+            --context caltopo/test-and-license \
+            --description "Tests and dependency license audit" \
+            --job-status "${{ job.status }}"

@@ -6,9 +6,12 @@ on:
     paths:
       - 'Dockerfile'
       - 'compose.yaml'
+      - 'compose.https.yaml'
+      - 'Caddyfile'
       - 'requirements.txt'
       - 'app/**'
       - 'docker/**'
+      - 'scripts/**'
       - 'support/**'
       - 'LICENSE'
       - 'THIRD-PARTY-NOTICES.md'
@@ -17,9 +20,12 @@ on:
     paths:
       - 'Dockerfile'
       - 'compose.yaml'
+      - 'compose.https.yaml'
+      - 'Caddyfile'
       - 'requirements.txt'
       - 'app/**'
       - 'docker/**'
+      - 'scripts/**'
       - 'support/**'
       - 'LICENSE'
       - 'THIRD-PARTY-NOTICES.md'
@@ -28,19 +34,23 @@ on:
 
 permissions:
   contents: read
+  statuses: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   container-compliance:
     name: Build, SBOM and license scan
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-
     env:
       IMAGE_REF: caltopo-history:compliance-${{ github.sha }}
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Build release-equivalent container image
         run: docker build --pull --tag "$IMAGE_REF" .
@@ -91,12 +101,10 @@ jobs:
           echo '- SPDX JSON SBOM generated with Syft.' >> "$GITHUB_STEP_SUMMARY"
           echo '- Full container license scan generated with Trivy.' >> "$GITHUB_STEP_SUMMARY"
           echo '- Review the uploaded Trivy report before publishing a binary image.' >> "$GITHUB_STEP_SUMMARY"
-          echo '' >> "$GITHUB_STEP_SUMMARY"
-          echo '> Trivy license risk classifications are review signals, not an automatic license-compatibility ruling. In particular, reciprocal/restricted classifications can be expected for normal OS packages in a Debian-based image.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Trivy license reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: caltopo-history-container-license-reports
           path: |
@@ -104,3 +112,14 @@ jobs:
             compliance-artifacts/trivy-license-report.txt
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish workflow status bridge
+        if: ${{ always() && github.event_name != 'pull_request' }}
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/publish_commit_status.py \
+            --context caltopo/container-compliance \
+            --description "Container build, SBOM and license scan" \
+            --job-status "${{ job.status }}"

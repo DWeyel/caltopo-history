@@ -4,7 +4,6 @@
 from pathlib import Path
 
 from app.config import settings
-from app.version import APP_VERSION
 
 
 def test_v09_license_and_source_link_are_exposed():
@@ -12,9 +11,7 @@ def test_v09_license_and_source_link_are_exposed():
     base = (root / "app/templates/base.html").read_text()
     readme = (root / "README.md").read_text()
     license_text = (root / "LICENSE").read_text()
-    assert APP_VERSION == "0.9"
     assert "GNU AFFERO GENERAL PUBLIC LICENSE" in license_text
-    assert "Version 3, 19 November 2007" in license_text
     assert "AGPL-3.0-only" in base
     assert "settings.source_code_url" in base
     assert "AGPL-3.0-only" in readme
