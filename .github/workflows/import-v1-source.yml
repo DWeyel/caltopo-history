@@ -1,0 +1,46 @@
+name: Import v1 source
+
+on:
+  push:
+    branches: [v1.0-staging]
+    paths:
+      - '.v1-import/**'
+      - '.github/workflows/import-v1-source.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out staging branch
+        uses: actions/checkout@v6
+        with:
+          ref: v1.0-staging
+          fetch-depth: 0
+
+      - name: Reconstruct source archive
+        run: |
+          cat .v1-import/chunk00 .v1-import/chunk01 .v1-import/chunk02 .v1-import/chunk03 \
+              .v1-import/chunk04 .v1-import/chunk05 .v1-import/chunk06 .v1-import/chunk07 \
+              > "$RUNNER_TEMP/v1.b64"
+          base64 -d "$RUNNER_TEMP/v1.b64" > "$RUNNER_TEMP/v1.tar.gz"
+          test "$(sha256sum "$RUNNER_TEMP/v1.tar.gz" | awk '{print $1}')" = "d43b196c59510b6d426898049ea21036da084de689ffaa8d63a66e8696b17db2"
+
+      - name: Replace transport tree with v1.0 source
+        run: |
+          rm -rf app tests deploy docker scripts support .github/workflows .v1-import
+          rm -f extract-support.sh
+          mkdir -p .github/workflows
+          tar -xzf "$RUNNER_TEMP/v1.tar.gz" -C "$GITHUB_WORKSPACE"
+          find . -type d -name __pycache__ -prune -exec rm -rf {} +
+          find . -name '*.pyc' -delete
+
+      - name: Commit v1.0 source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Prepare CalTopo History v1.0"
+          git push origin HEAD:v1.0-staging
