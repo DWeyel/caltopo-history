@@ -1,6 +1,6 @@
-# CalTopo History v0.8 — Docker deployment
+# CalTopo History v0.9 — Docker deployment
 
-This package contains the complete CalTopo History v0.8 application, a Docker image definition and Docker Compose deployment.
+This package contains the complete CalTopo History v0.9 application, a Docker image definition and Docker Compose deployment.
 
 ## Included
 
@@ -26,8 +26,8 @@ This package contains the complete CalTopo History v0.8 application, a Docker im
 ## Fresh installation
 
 ```bash
-unzip caltopo-history-v0.8-docker.zip
-cd caltopo-history-docker-v0.8
+unzip caltopo-history-v0.9-docker.zip
+cd caltopo-history-docker-v0.9
 cp .env.example .env
 nano .env
 ```
@@ -64,10 +64,10 @@ curl http://127.0.0.1:8765/healthz
 Expected response:
 
 ```json
-{"ok":true,"version":"0.8"}
+{"ok":true,"version":"0.9"}
 ```
 
-A fresh v0.8 database uses **English** as the UI language. Change it under **Settings → Language** if desired.
+A fresh v0.9 database uses **English** as the UI language. Change it under **Settings → Language** if desired.
 
 By default the web service is published only on `127.0.0.1:8765`. Put Apache, Nginx, Caddy, Traefik or another TLS reverse proxy in front of it. If direct network access is intentional, change `BIND_IP` in `.env`.
 
@@ -83,17 +83,7 @@ Do not use that setting for an Internet-facing deployment.
 
 ## Persistent data
 
-The default Compose configuration uses the named volume:
-
-```text
-caltopo_history_data
-```
-
-The database is:
-
-```text
-/data/caltopo-history.db
-```
+The default Compose configuration uses the named volume `caltopo_history_data`. The database is `/data/caltopo-history.db`.
 
 The database, snapshots, object history, users, settings, UI language and audit log survive image/container replacement.
 
@@ -120,9 +110,7 @@ docker compose build --pull
 docker compose up -d
 ```
 
-Schema/settings migrations run automatically at application startup. An existing v0.7 installation retains German as its initial v0.8 language so that the upgrade does not unexpectedly switch the UI; an admin can change it afterwards.
-
-The persistent volume is not removed by `docker compose down` unless `-v` is explicitly supplied.
+Schema/settings migrations run automatically at application startup. The persistent volume is not removed by `docker compose down` unless `-v` is explicitly supplied.
 
 **Do not use `docker compose down -v` unless you intentionally want to delete the Docker volume and all application data.**
 
@@ -135,9 +123,7 @@ docker compose build
 ./docker/import-db.sh /path/to/caltopo-history.db
 ```
 
-The application performs its normal migration when the container starts.
-
-For the cleanest migration, stop the native service before copying the SQLite file. If it must remain running, use SQLite's online backup mechanism instead of copying only the `.db` file while WAL mode may be active.
+The application performs its normal migration when the container starts. For the cleanest migration, stop the native service before copying the SQLite file. If it must remain running, use SQLite's online backup mechanism instead of copying only the `.db` file while WAL mode may be active.
 
 ## Database backup
 
@@ -199,3 +185,19 @@ The container starts as root only long enough to ensure `/data` is writable by U
 ## Disk-space protection
 
 The application evaluates the filesystem backing `/data`. Configurable warning and hard-stop thresholds are available in Settings. Below the hard threshold new backup/snapshot writes are blocked and resume automatically when free space recovers.
+
+## License and source-code link
+
+CalTopo History v0.9 is licensed under `AGPL-3.0-only`. The web UI displays the configured source-code location. The default is the upstream GitHub repository. If you run a modified version, set `SOURCE_CODE_URL` to the Corresponding Source for that deployed version.
+
+## Map tile provider
+
+The default is the OpenStreetMap community raster tile service. Configure another provider when required:
+
+```env
+MAP_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
+MAP_TILE_ATTRIBUTION='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+MAP_TILE_MAX_ZOOM=19
+```
+
+The OpenStreetMap community tile service is best-effort and intended for modest interactive use. It must not be used for bulk downloads, prefetching or offline tile generation. See `THIRD-PARTY-NOTICES.md`.
