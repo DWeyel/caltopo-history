@@ -1,0 +1,33 @@
+[Unit]
+Description=CalTopo History backup and restore service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=caltopo-history
+Group=caltopo-history
+WorkingDirectory=/opt/caltopo-history
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/caltopo-history.env
+ExecStart=/opt/caltopo-history/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8765 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/caltopo-history
+
+[Install]
+WantedBy=multi-user.target
