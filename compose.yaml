@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: caltopo-history:0.8
+    image: caltopo-history:0.9
     container_name: caltopo-history
     restart: unless-stopped
     environment:
@@ -19,6 +19,10 @@ services:
       TZ: "${TZ:-Europe/Berlin}"
       DATABASE_URL: "sqlite:////data/caltopo-history.db"
       CALTOPO_BASE_URL: "${CALTOPO_BASE_URL:-https://caltopo.com}"
+      SOURCE_CODE_URL: "${SOURCE_CODE_URL:-}"
+      MAP_TILE_URL: "${MAP_TILE_URL:-}"
+      MAP_TILE_ATTRIBUTION: "${MAP_TILE_ATTRIBUTION:-}"
+      MAP_TILE_MAX_ZOOM: "${MAP_TILE_MAX_ZOOM:-}"
       APP_PORT: "8765"
       FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-*}"
     ports:
