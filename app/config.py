@@ -1,7 +1,15 @@
+# SPDX-FileCopyrightText: 2026 Dennis Weyel
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+
+
+def _text(name: str, default: str) -> str:
+    value = os.getenv(name)
+    return value if value not in (None, "") else default
 
 
 def _bool(name: str, default: bool) -> bool:
@@ -25,6 +33,13 @@ class Settings:
     app_secret_key: str = os.getenv("APP_SECRET_KEY", "change-me-to-a-long-random-string")
     cookie_secure: bool = _bool("COOKIE_SECURE", True)
     timezone: str = os.getenv("TZ", "Europe/Berlin")
+    source_code_url: str = _text("SOURCE_CODE_URL", "https://github.com/DWeyel/caltopo-history")
+    map_tile_url: str = _text("MAP_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+    map_tile_attribution: str = _text(
+        "MAP_TILE_ATTRIBUTION",
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    )
+    map_tile_max_zoom: int = int(_text("MAP_TILE_MAX_ZOOM", "19"))
 
 
 settings = Settings()
