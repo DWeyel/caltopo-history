@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (for example v1.0)'
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          VERSION="${TAG#v}"
+          APP_VERSION="$(python3 - <<'PY'
+          from app.version import APP_VERSION
+          print(APP_VERSION)
+          PY
+          )"
+          if [[ "$VERSION" != "$APP_VERSION" ]]; then
+            echo "Tag version $VERSION does not match app.version $APP_VERSION" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install and test release source
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python scripts/check_dependency_licenses.py
+          python -m pip install pytest
+          pytest -q
+
+      - name: Build release archives
+        run: python scripts/build_release_archives.py
+
+      - name: Build release container once
+        run: docker build --pull --tag caltopo-history:release .
+
+      - name: Generate release SBOM
+        uses: anchore/sbom-action@v0.24.0
+        with:
+          image: caltopo-history:release
+          format: spdx-json
+          output-file: dist/caltopo-history-v${{ steps.version.outputs.version }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.3.1
+        with:
+          version: v0.73.0
+          cache: true
+
+      - name: Generate full container license report
+        run: |
+          trivy image \
+            --scanners license \
+            --license-full \
+            --format table \
+            --output "dist/caltopo-history-v${{ steps.version.outputs.version }}-licenses.txt" \
+            caltopo-history:release
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish scanned image to GHCR
+        shell: bash
+        run: |
+          IMAGE="${{ steps.version.outputs.image }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          docker tag caltopo-history:release "$IMAGE:$VERSION"
+          docker tag caltopo-history:release "$IMAGE:latest"
+          docker push "$IMAGE:$VERSION"
+          docker push "$IMAGE:latest"
+
+      - name: Create GitHub Release and upload assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release create "$TAG" \
+            dist/caltopo-history-v${VERSION}-docker.zip \
+            dist/caltopo-history-debian12-ispconfig-v${VERSION}.zip \
+            dist/caltopo-history-v${VERSION}.spdx.json \
+            dist/caltopo-history-v${VERSION}-licenses.txt \
+            --title "CalTopo History ${VERSION}" \
+            --notes-file "RELEASE-NOTES-v${VERSION}.md" \
+            --verify-tag

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Dennis Weyel
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import base64
@@ -6,6 +9,7 @@ import hmac
 import json
 import time
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 
@@ -27,9 +31,10 @@ def sign_request(method: str, endpoint: str, expires: int, payload_string: str, 
 
 
 class CalTopoClient:
-    def __init__(self, credential_id: str | None = None, credential_secret: str | None = None):
-        self.credential_id = credential_id or settings.credential_id
-        self.credential_secret = credential_secret or settings.credential_secret
+    def __init__(self, credential_id: str | None = None, credential_secret: str | None = None, base_url: str | None = None):
+        self.credential_id = settings.credential_id if credential_id is None else credential_id
+        self.credential_secret = settings.credential_secret if credential_secret is None else credential_secret
+        self.base_url = (settings.caltopo_base_url if base_url is None else base_url).rstrip("/")
         if not self.credential_id or not self.credential_secret:
             raise CalTopoError("CalTopo credentials are not configured")
 
@@ -38,7 +43,11 @@ class CalTopoClient:
         payload_string = json.dumps(payload) if payload is not None else ""
         expires = int(time.time() * 1000) + 120_000
         signature = sign_request(method, endpoint, expires, payload_string, self.credential_secret)
-        params: dict[str, Any] = {"id": self.credential_id, "expires": expires, "signature": signature}
+        params: dict[str, Any] = {
+            "id": self.credential_id,
+            "expires": expires,
+            "signature": signature,
+        }
         body = None
         query = None
         if method == "POST" and payload is not None:
@@ -46,7 +55,7 @@ class CalTopoClient:
             body = params
         else:
             query = params
-        url = f"{settings.caltopo_base_url}{endpoint}"
+        url = f"{self.base_url}{endpoint}"
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
             response = await client.request(method, url, params=query, data=body)
         if response.status_code >= 400:

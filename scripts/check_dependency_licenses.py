@@ -37,6 +37,7 @@ def advertised_license(dist: md.Distribution) -> str:
         for c in (meta.get_all("Classifier") or [])
         if c.startswith("License ::")
     )
+    # Avoid printing full embedded license texts; first 300 chars are enough for matching/reporting.
     return " | ".join(values)[:300]
 
 

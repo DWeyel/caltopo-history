@@ -1,0 +1,15 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+{% extends "base.html" %}
+{% block title %}{{ t('restore_audit') }} · CalTopo History{% endblock %}
+{% block content %}
+<nav class="crumb"><a href="/settings">← {{ t('settings') }}</a></nav>
+<div class="page-head"><div><h1>{{ t('restore_audit') }}</h1><p class="muted">{{ t('audit_intro') }}</p></div></div>
+<section class="card">
+<div class="table-wrap"><table><thead><tr><th>{{ t('time') }}</th><th>{{ t('users') }}</th><th>{{ t('role') }}</th><th>{{ t('client_ip') }}</th><th>{{ t('action') }}</th><th>{{ t('map_id') }}</th><th>{{ t('object') }}</th><th>{{ t('object_id') }}</th><th>{{ t('details') }}</th></tr></thead><tbody>
+{% for a in audits %}<tr>
+<td>{{ a.created_at | localtime }}</td><td><strong>{{ a.actor_username or t('system') }}</strong></td><td>{{ a.actor_role or '—' }}</td><td class="mono small">{{ a.client_ip or '—' }}</td><td class="mono small">{{ audit_action_label(a.action) }}</td><td class="mono small">{{ a.map_id or '—' }}</td><td><strong>{{ t('whole_map') if not a.object_id else (a.object_title or '—') }}</strong></td><td class="mono small">{{ a.object_id or '—' }}</td><td class="small">{{ a.detail }}</td>
+</tr>{% else %}<tr><td colspan="9" class="empty">{{ t('no_audit_entries') }}</td></tr>{% endfor %}
+</tbody></table></div>
+</section>
+{% endblock %}

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Dennis Weyel
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import gzip
@@ -6,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from .db import CurrentObject, ObjectVersion, Snapshot, utcnow
@@ -60,10 +63,18 @@ def feature_updated_at(feature: dict[str, Any]) -> datetime:
 
 def map_title(payload: dict[str, Any], map_id: str = "") -> str:
     map_obj = payload.get("map") if isinstance(payload.get("map"), dict) else None
-    candidates = [payload, payload.get("properties"), payload.get("metadata"), payload.get("meta"), map_obj, map_obj.get("properties") if map_obj else None]
+    candidates = [
+        payload,
+        payload.get("properties"),
+        payload.get("metadata"),
+        payload.get("meta"),
+        map_obj,
+        map_obj.get("properties") if map_obj else None,
+    ]
     for props in candidates:
         if isinstance(props, dict) and props.get("title"):
             return str(props["title"])
+
     for collection_name in ("features", "maps"):
         collection = payload.get(collection_name)
         if not isinstance(collection, list):
@@ -72,8 +83,9 @@ def map_title(payload: dict[str, Any], map_id: str = "") -> str:
             if not isinstance(feature, dict):
                 continue
             props = feature.get("properties") or {}
-            if props.get("class") == "CollaborativeMap" and (not map_id or str(feature.get("id")) == map_id) and props.get("title"):
-                return str(props["title"])
+            if props.get("class") == "CollaborativeMap" and (not map_id or str(feature.get("id")) == map_id):
+                if props.get("title"):
+                    return str(props["title"])
     return ""
 
 
@@ -102,17 +114,39 @@ def current_state(db: Session, map_id: str) -> dict[str, Any]:
 
 def create_snapshot(db: Session, map_id: str, server_ts: int, reason: str) -> Snapshot:
     state = current_state(db, map_id)
-    snap = Snapshot(map_id=map_id, server_timestamp=server_ts, reason=reason, object_count=len(state["features"]), state_gz=pack_json(state))
-    db.add(snap); db.flush(); return snap
+    snap = Snapshot(
+        map_id=map_id,
+        server_timestamp=server_ts,
+        reason=reason,
+        object_count=len(state["features"]),
+        state_gz=pack_json(state),
+    )
+    db.add(snap)
+    db.flush()
+    return snap
 
 
 def create_snapshot_if_changed(db: Session, map_id: str, server_ts: int, reason: str) -> Snapshot | None:
+    """Create a snapshot only if the current state differs from the latest stored snapshot.
+
+    The first snapshot is always created to establish a baseline.
+    """
     state = current_state(db, map_id)
-    latest = db.scalar(select(Snapshot).where(Snapshot.map_id == map_id).order_by(Snapshot.captured_at.desc(), Snapshot.id.desc()).limit(1))
+    latest = db.scalar(
+        select(Snapshot).where(Snapshot.map_id == map_id).order_by(Snapshot.captured_at.desc(), Snapshot.id.desc()).limit(1)
+    )
     if latest is not None and canonical(snapshot_state(latest)) == canonical(state):
         return None
-    snap = Snapshot(map_id=map_id, server_timestamp=server_ts, reason=reason, object_count=len(state["features"]), state_gz=pack_json(state))
-    db.add(snap); db.flush(); return snap
+    snap = Snapshot(
+        map_id=map_id,
+        server_timestamp=server_ts,
+        reason=reason,
+        object_count=len(state["features"]),
+        state_gz=pack_json(state),
+    )
+    db.add(snap)
+    db.flush()
+    return snap
 
 
 def _upsert_feature(db: Session, map_id: str, feature: dict[str, Any], server_ts: int) -> bool:
@@ -120,96 +154,200 @@ def _upsert_feature(db: Session, map_id: str, feature: dict[str, Any], server_ts
     if not object_id:
         return False
     row = db.scalar(select(CurrentObject).where(and_(CurrentObject.map_id == map_id, CurrentObject.object_id == object_id)))
-    ftype = feature_type(feature); title = feature_title(feature); packed = pack_json(feature)
+    ftype = feature_type(feature)
+    title = feature_title(feature)
+    packed = pack_json(feature)
     if row and canonical(unpack_json(row.feature_gz)) == canonical(feature):
         return False
-    db.add(ObjectVersion(map_id=map_id, object_id=object_id, object_type=ftype, title=title, server_timestamp=server_ts, deleted=False, feature_gz=packed))
+    db.add(ObjectVersion(
+        map_id=map_id,
+        object_id=object_id,
+        object_type=ftype,
+        title=title,
+        server_timestamp=server_ts,
+        deleted=False,
+        feature_gz=packed,
+    ))
     if row:
-        row.object_type = ftype; row.title = title; row.feature_gz = packed; row.updated_at = feature_updated_at(feature)
+        row.object_type = ftype
+        row.title = title
+        row.feature_gz = packed
+        row.updated_at = feature_updated_at(feature)
     else:
-        db.add(CurrentObject(map_id=map_id, object_id=object_id, object_type=ftype, title=title, feature_gz=packed, updated_at=feature_updated_at(feature)))
+        db.add(CurrentObject(
+            map_id=map_id,
+            object_id=object_id,
+            object_type=ftype,
+            title=title,
+            feature_gz=packed,
+            updated_at=feature_updated_at(feature),
+        ))
     return True
 
 
 def _delete_current(db: Session, row: CurrentObject, server_ts: int) -> None:
-    db.add(ObjectVersion(map_id=row.map_id, object_id=row.object_id, object_type=row.object_type, title=row.title, server_timestamp=server_ts, deleted=True, feature_gz=None))
+    db.add(ObjectVersion(
+        map_id=row.map_id,
+        object_id=row.object_id,
+        object_type=row.object_type,
+        title=row.title,
+        server_timestamp=server_ts,
+        deleted=True,
+        feature_gz=None,
+    ))
     db.delete(row)
 
 
 def ingest_full(db: Session, map_id: str, payload: dict[str, Any]) -> int:
-    state = normalize_state(payload); ts = response_timestamp(payload)
+    state = normalize_state(payload)
+    ts = response_timestamp(payload)
     incoming = {str(f.get("id")): f for f in state.get("features", []) if f.get("id") is not None}
-    existing = db.scalars(select(CurrentObject).where(CurrentObject.map_id == map_id)).all(); changes = 0
-    for feature in incoming.values(): changes += int(_upsert_feature(db, map_id, feature, ts))
+    existing = db.scalars(select(CurrentObject).where(CurrentObject.map_id == map_id)).all()
+    changes = 0
+    for feature in incoming.values():
+        changes += int(_upsert_feature(db, map_id, feature, ts))
     for row in existing:
-        if row.object_id not in incoming: _delete_current(db, row, ts); changes += 1
-    db.flush(); return changes
+        if row.object_id not in incoming:
+            _delete_current(db, row, ts)
+            changes += 1
+    db.flush()
+    return changes
 
 
 def ingest_incremental(db: Session, map_id: str, payload: dict[str, Any]) -> int:
-    state = normalize_state(payload); ts = response_timestamp(payload); changes = 0
-    for feature in state.get("features", []): changes += int(_upsert_feature(db, map_id, feature, ts))
+    state = normalize_state(payload)
+    ts = response_timestamp(payload)
+    changes = 0
+    for feature in state.get("features", []):
+        changes += int(_upsert_feature(db, map_id, feature, ts))
+
     ids = response_ids(payload)
     if ids:
         for cls, server_ids in ids.items():
             server_set = {str(x) for x in server_ids}
             rows = db.scalars(select(CurrentObject).where(and_(CurrentObject.map_id == map_id, CurrentObject.object_type == cls))).all()
             for row in rows:
-                if row.object_id not in server_set: _delete_current(db, row, ts); changes += 1
-    db.flush(); return changes
+                if row.object_id not in server_set:
+                    _delete_current(db, row, ts)
+                    changes += 1
+    db.flush()
+    return changes
 
 
-def snapshot_state(snapshot: Snapshot) -> dict[str, Any]: return unpack_json(snapshot.state_gz)
+def snapshot_state(snapshot: Snapshot) -> dict[str, Any]:
+    return unpack_json(snapshot.state_gz)
 
 
 @dataclass
 class DiffItem:
-    object_id: str; object_type: str; title: str; status: str; target: dict[str, Any] | None; current: dict[str, Any] | None
+    object_id: str
+    object_type: str
+    title: str
+    status: str
+    target: dict[str, Any] | None
+    current: dict[str, Any] | None
 
 
 def diff_states(target: dict[str, Any], current: dict[str, Any]) -> list[DiffItem]:
-    t = {str(f.get("id")): f for f in target.get("features", []) if f.get("id") is not None}; c = {str(f.get("id")): f for f in current.get("features", []) if f.get("id") is not None}; out=[]
+    t = {str(f.get("id")): f for f in target.get("features", []) if f.get("id") is not None}
+    c = {str(f.get("id")): f for f in current.get("features", []) if f.get("id") is not None}
+    out: list[DiffItem] = []
     for oid in sorted(set(t) | set(c)):
-        tf, cf = t.get(oid), c.get(oid); probe = tf or cf or {}
-        if tf is None: status="remove"
-        elif cf is None: status="restore"
-        elif canonical(tf) != canonical(cf): status="change"
-        else: continue
+        tf, cf = t.get(oid), c.get(oid)
+        probe = tf or cf or {}
+        if tf is None:
+            status = "remove"
+        elif cf is None:
+            status = "restore"
+        elif canonical(tf) != canonical(cf):
+            status = "change"
+        else:
+            continue
         out.append(DiffItem(oid, feature_type(probe), feature_title(probe), status, tf, cf))
     return out
 
 
 @dataclass
 class ObjectOverviewItem:
-    object_id: str; object_type: str; title: str; exists_now: bool; restored: bool; status: str; last_change_at: datetime | None
+    object_id: str
+    object_type: str
+    title: str
+    exists_now: bool
+    restored: bool
+    status: str
+    last_change_at: datetime | None
 
 
 def object_overview(db: Session, map_id: str) -> list[ObjectOverviewItem]:
-    current_rows = {row.object_id: row for row in db.scalars(select(CurrentObject).where(CurrentObject.map_id == map_id)).all()}
-    versions = db.scalars(select(ObjectVersion).where(ObjectVersion.map_id == map_id).order_by(ObjectVersion.object_id, ObjectVersion.id)).all(); by_object={}
-    for version in versions: by_object.setdefault(version.object_id, []).append(version)
-    out=[]
-    for oid in set(current_rows) | set(by_object):
-        current=current_rows.get(oid); ovs=by_object.get(oid,[]); latest=ovs[-1] if ovs else None
-        was_deleted=any(v.deleted for v in ovs[:-1] if latest is not None) or (current is not None and any(v.deleted for v in ovs)); exists_now=current is not None; restored=exists_now and was_deleted and latest is not None and not latest.deleted
-        out.append(ObjectOverviewItem(oid, current.object_type if current else (latest.object_type if latest else "Unknown"), current.title if current else (latest.title if latest else ""), exists_now, restored, "restored" if restored else ("present" if exists_now else "deleted"), latest.captured_at if latest else (current.updated_at if current else None)))
-    return sorted(out,key=lambda item:(item.status=="deleted",item.object_type.lower(),item.title.lower(),item.object_id))
+    """Return every object ever seen, including deleted and later restored objects."""
+    current_rows = {
+        row.object_id: row
+        for row in db.scalars(select(CurrentObject).where(CurrentObject.map_id == map_id)).all()
+    }
+    versions = db.scalars(
+        select(ObjectVersion).where(ObjectVersion.map_id == map_id).order_by(ObjectVersion.object_id, ObjectVersion.id)
+    ).all()
+    by_object: dict[str, list[ObjectVersion]] = {}
+    for version in versions:
+        by_object.setdefault(version.object_id, []).append(version)
+
+    object_ids = set(current_rows) | set(by_object)
+    out: list[ObjectOverviewItem] = []
+    for oid in object_ids:
+        current = current_rows.get(oid)
+        object_versions = by_object.get(oid, [])
+        latest = object_versions[-1] if object_versions else None
+        was_deleted = any(version.deleted for version in object_versions[:-1] if latest is not None) or (
+            current is not None and any(version.deleted for version in object_versions)
+        )
+        exists_now = current is not None
+        restored = exists_now and was_deleted and latest is not None and not latest.deleted
+        status = "restored" if restored else ("present" if exists_now else "deleted")
+        out.append(ObjectOverviewItem(
+            object_id=oid,
+            object_type=(current.object_type if current else (latest.object_type if latest else "Unknown")),
+            title=(current.title if current else (latest.title if latest else "")),
+            exists_now=exists_now,
+            restored=restored,
+            status=status,
+            last_change_at=(latest.captured_at if latest else (current.updated_at if current else None)),
+        ))
+    return sorted(out, key=lambda item: (item.status == "deleted", item.object_type.lower(), item.title.lower(), item.object_id))
 
 
 @dataclass
 class SnapshotCompareItem:
-    object_id: str; object_type: str; title: str; status: str; left: dict[str, Any] | None; right: dict[str, Any] | None
+    object_id: str
+    object_type: str
+    title: str
+    status: str
+    left: dict[str, Any] | None
+    right: dict[str, Any] | None
 
 
-def compare_states(left: dict[str, Any], right: dict[str, Any], include_unchanged: bool=False) -> list[SnapshotCompareItem]:
-    a={str(f.get("id")):f for f in left.get("features",[]) if f.get("id") is not None}; b={str(f.get("id")):f for f in right.get("features",[]) if f.get("id") is not None}; out=[]
-    for oid in sorted(set(a)|set(b)):
-        af,bf=a.get(oid),b.get(oid); probe=bf or af or {}
-        if af is None: status="added"
-        elif bf is None: status="removed"
-        elif canonical(af)!=canonical(bf): status="changed"
+def compare_states(left: dict[str, Any], right: dict[str, Any], include_unchanged: bool = False) -> list[SnapshotCompareItem]:
+    a = {str(f.get("id")): f for f in left.get("features", []) if f.get("id") is not None}
+    b = {str(f.get("id")): f for f in right.get("features", []) if f.get("id") is not None}
+    out: list[SnapshotCompareItem] = []
+    for oid in sorted(set(a) | set(b)):
+        af, bf = a.get(oid), b.get(oid)
+        probe = bf or af or {}
+        if af is None:
+            status = "added"
+        elif bf is None:
+            status = "removed"
+        elif canonical(af) != canonical(bf):
+            status = "changed"
         else:
-            status="unchanged"
-            if not include_unchanged: continue
-        out.append(SnapshotCompareItem(oid,feature_type(probe),feature_title(probe),status,af,bf))
+            status = "unchanged"
+            if not include_unchanged:
+                continue
+        out.append(SnapshotCompareItem(
+            object_id=oid,
+            object_type=feature_type(probe),
+            title=feature_title(probe),
+            status=status,
+            left=af,
+            right=bf,
+        ))
     return out

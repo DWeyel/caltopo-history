@@ -1,0 +1,80 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+{% extends "base.html" %}
+{% block title %}{{ t('settings') }} · CalTopo History{% endblock %}
+{% block content %}
+<nav class="crumb"><a href="/">← {{ t('dashboard') }}</a></nav>
+<div class="page-head"><div><h1>{{ t('settings') }}</h1><p class="muted">{{ t('settings_intro') }}</p></div></div>
+
+<div class="settings-nav">
+  <a class="settings-tile" href="/users"><strong>{{ t('users') }}</strong><span>{{ t('users_tile') }}</span></a>
+  <a class="settings-tile" href="/audit"><strong>{{ t('restore_audit') }}</strong><span>{{ t('audit_tile') }}</span></a>
+  <a class="settings-tile" href="/settings/maintenance"><strong>{{ t('maintenance') }}</strong><span>{{ t('maintenance_tile') }}</span></a>
+</div>
+
+<section class="card">
+  <h2>{{ t('backup_caltopo') }}</h2>
+  <form method="post" action="/settings" class="stack" autocomplete="off">
+    <fieldset class="settings-fieldset">
+      <legend>{{ t('caltopo_connection') }}</legend>
+      <label>{{ t('credential_id') }}<input name="credential_id" value="{{ credential_id }}" autocomplete="off"></label>
+      <p class="hint">{{ t('credential_id_help') }} · {{ t('configuration_source', source=t('source_settings') if credential_id_source == 'settings' else t('source_environment')) }}</p>
+
+      <label>{{ t('credential_secret_replace') }}<input type="password" name="credential_secret" value="" autocomplete="new-password" placeholder="••••••••••••••••"></label>
+      <p class="hint">
+        {{ t('credential_secret_status_configured') if credential_secret_configured else t('credential_secret_status_missing') }} ·
+        {{ t('configuration_source', source=t('source_settings') if credential_secret_source == 'settings' else t('source_environment')) }}.
+        {{ t('credential_secret_help') }}
+      </p>
+      {% if credential_secret_error %}<div class="alert danger">{{ credential_secret_error }}</div>{% endif %}
+      {% if credential_secret_source == 'settings' %}
+      <label class="check-row"><input type="checkbox" name="clear_credential_secret" value="1"> {{ t('credential_secret_use_environment') }}</label>
+      {% endif %}
+
+      <label>{{ t('caltopo_base_url') }}<input name="caltopo_base_url" value="{{ caltopo_base_url }}" required></label>
+      <label>{{ t('root_team_id') }}<input name="team_id" value="{{ team_id }}" placeholder="ABC123"></label>
+      <p class="hint">{{ t('root_team_help') }}</p>
+    </fieldset>
+
+    <fieldset class="settings-fieldset">
+      <legend>{{ t('service_defaults') }}</legend>
+      <label>{{ t('global_backup_interval_minutes') }}<input type="number" min="1" max="10080" name="global_interval_minutes" value="{{ global_interval_minutes }}" required></label>
+      <p class="hint">{{ t('global_interval_help') }}</p>
+      <div class="grid two">
+        <label>{{ t('discovery_interval_seconds') }}<input type="number" min="60" max="86400" name="discovery_interval" value="{{ discovery_interval }}" required></label>
+        <label>{{ t('full_verify_every') }}<input type="number" min="1" max="10000" name="full_verify_every_value" value="{{ full_verify_every_value }}" required></label>
+      </div>
+      <p class="hint">{{ t('discovery_interval_help') }}</p>
+      <p class="hint">{{ t('full_verify_help') }}</p>
+    </fieldset>
+
+    <fieldset class="settings-fieldset">
+      <legend>{{ t('language') }}</legend>
+      <label>{{ t('language') }}<select name="ui_language" required>{% for code, label in language_options %}<option value="{{ code }}" {% if code == ui_language %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+      <p class="hint">{{ t('language_help') }}</p>
+    </fieldset>
+
+    <fieldset class="settings-fieldset"><legend>{{ t('storage_protection') }}</legend>
+      <div class="grid two">
+        <label>{{ t('warning_below_mib') }}<input type="number" min="256" max="1048576" name="disk_warning_mb" value="{{ disk_warning_mb }}" required></label>
+        <label>{{ t('block_below_mib') }}<input type="number" min="256" max="1048576" name="disk_hard_mb" value="{{ disk_hard_mb }}" required></label>
+      </div>
+      <p class="hint">{{ t('storage_protection_help', free=(disk.free_bytes | bytesize), percent=("%.1f"|format(disk.free_percent))) }}</p>
+    </fieldset>
+
+    <button type="submit">{{ t('save_settings') }}</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>{{ t('deployment_security') }}</h2>
+  <dl class="kv-list">
+    <div><dt>{{ t('app_secret_key') }}</dt><dd><strong>{{ t('configured_yes') if app_secret_configured else t('configured_no') }}</strong> · {{ t('configuration_source', source=t('source_file') if app_secret_source == 'file' else t('source_environment')) }}</dd></div>
+    <div><dt>{{ t('cookie_secure_status') }}</dt><dd><strong>{{ t('enabled') if cookie_secure else t('disabled') }}</strong></dd></div>
+    <div><dt>{{ t('timezone_setting') }}</dt><dd><code>{{ timezone }}</code></dd></div>
+  </dl>
+  <p class="hint">{{ t('app_secret_help') }}</p>
+  <p class="hint">{{ t('cookie_secure_help') }}</p>
+  <p class="hint">{{ t('deployment_only') }}</p>
+</section>
+{% endblock %}

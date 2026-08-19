@@ -1,0 +1,98 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+{% extends "base.html" %}
+{% block title %}{{ t('maintenance') }} · CalTopo History{% endblock %}
+{% block content %}
+<nav class="crumb"><a href="/settings">← {{ t('settings') }}</a></nav>
+<div class="page-head"><div><h1>{{ t('maintenance') }}</h1><p class="muted">{{ t('maintenance_intro') }}</p></div></div>
+
+<div class="disk-meter card {% if disk.hard_blocked %}danger-zone{% elif disk.warning %}warning-card{% endif %}">
+  <div class="section-head"><div><h2>{{ t('server_storage') }}</h2><p class="hint">{{ t('filesystem', path=disk.path) }}</p></div>{% if disk.hard_blocked %}<span class="status bad">{{ t('backup_lock') }}</span>{% elif disk.warning %}<span class="status warning">{{ t('warning') }}</span>{% else %}<span class="status good">{{ t('ok') }}</span>{% endif %}</div>
+  <div class="disk-bar" aria-label="{{ t('free_storage_aria', percent=('%.1f'|format(disk.free_percent))) }}"><span style="width: {{ [100, disk.free_percent]|min }}%"></span></div>
+  <div class="storage-breakdown"><span>{{ t('free') }} <strong>{{ disk.free_bytes | bytesize }}</strong></span><span>{{ t('used') }} <strong>{{ disk.used_bytes | bytesize }}</strong></span><span>{{ t('total') }} <strong>{{ disk.total_bytes | bytesize }}</strong></span><span>{{ t('warning_below') }} <strong>{{ disk.warning_free_bytes | bytesize }}</strong></span><span>{{ t('block_below') }} <strong>{{ disk.hard_free_bytes | bytesize }}</strong></span></div>
+  {% if disk.hard_blocked %}<p class="danger-text"><strong>{{ t('write_blocked_text') }}</strong></p>{% endif %}
+</div>
+
+<div class="stats">
+  <div class="stat"><span>{{ t('snapshots') }}</span><strong>{{ storage.snapshot_bytes | bytesize }}</strong><div class="small muted">{{ t('snapshot_count', count=storage.snapshot_count) }}</div></div>
+  <div class="stat"><span>{{ t('object_history_storage') }}</span><strong>{{ storage.version_bytes | bytesize }}</strong><div class="small muted">{{ t('version_count', count=storage.version_count) }}</div></div>
+  <div class="stat"><span>{{ t('current_state') }}</span><strong>{{ storage.current_bytes | bytesize }}</strong><div class="small muted">{{ t('object_count', count=storage.current_count) }}</div></div>
+  <div class="stat"><span>{{ t('logical_backup_data') }}</span><strong>{{ storage.logical_bytes | bytesize }}</strong><div class="small muted">{{ t('compressed_payloads') }}</div></div>
+  <div class="stat"><span>{{ t('active_database') }}</span><strong>{{ storage.database_bytes | bytesize }}</strong><div class="small muted">{{ t('sqlite_wal_shm') }}</div></div>
+  <div class="stat"><span>{{ t('upgrade_backups') }}</span><strong>{{ storage.database_backup_bytes | bytesize }}</strong><div class="small muted">{{ t('file_count', count=storage.database_backups|length) }}</div></div>
+  <div class="stat"><span>{{ t('tool_data_total') }}</span><strong>{{ storage.tool_data_bytes | bytesize }}</strong><div class="small muted">{{ t('tool_data_path') }}</div></div>
+</div>
+
+<section class="card">
+  <div class="section-head"><h2>{{ t('storage_per_map') }}</h2><span class="pill">{{ storage.maps|length }}</span></div>
+  <div class="table-wrap"><table><thead><tr><th>{{ t('map') }}</th><th>{{ t('status') }}</th><th>{{ t('snapshots') }}</th><th>{{ t('object_history_storage') }}</th><th>{{ t('current_state') }}</th><th>{{ t('logical_backup_data') }}</th></tr></thead><tbody>
+    {% for m in storage.maps %}<tr>
+      <td><strong>{{ m.title }}</strong><div class="mono small muted">{{ m.map_id }}</div></td>
+      <td>{% if m.watched %}<span class="status good">{{ t('watched') }}</span>{% else %}<span class="status off">{{ t('archive') }}</span>{% endif %}</td>
+      <td>{{ m.snapshot_bytes | bytesize }}<div class="small muted">{{ t('snapshot_count', count=m.snapshot_count) }}</div></td>
+      <td>{{ m.version_bytes | bytesize }}<div class="small muted">{{ t('version_count', count=m.version_count) }}</div></td>
+      <td>{{ m.current_bytes | bytesize }}<div class="small muted">{{ t('object_count', count=m.current_count) }}</div></td>
+      <td><strong>{{ m.logical_bytes | bytesize }}</strong></td>
+    </tr>{% else %}<tr><td colspan="6" class="empty">{{ t('no_backup_data') }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+<div class="grid two">
+<section class="card danger-zone">
+  <h2>{{ t('delete_old_snapshots') }}</h2>
+  <p class="hint">{{ t('delete_old_snapshots_help') }}</p>
+  <form method="post" action="/settings/maintenance/snapshots" class="stack" onsubmit="return confirm({{ t('delete_old_snapshots_confirm') | tojson }});">
+    <label>{{ t('map') }}<select name="map_id"><option value="">{{ t('all_maps') }}</option>{% for m in storage.maps %}<option value="{{ m.map_id }}">{{ m.title }} · {{ m.map_id }}</option>{% endfor %}</select></label>
+    <label>{{ t('older_than_days') }}<input type="number" min="1" max="3650" name="older_than_days" value="90" required></label>
+    <label>{{ t('keep_latest_snapshots') }}<input type="number" min="1" max="1000" name="keep_latest" value="3" required></label>
+    <label>{{ t('confirmation') }}<input name="confirmation" placeholder="DELETE SNAPSHOTS" required></label>
+    <button class="danger-button" type="submit">{{ t('prune_snapshots') }}</button>
+  </form>
+</section>
+
+<section class="card danger-zone">
+  <h2>{{ t('delete_old_history') }}</h2>
+  <p class="hint">{{ t('delete_old_history_help') }}</p>
+  <form method="post" action="/settings/maintenance/object-history" class="stack" onsubmit="return confirm({{ t('delete_old_history_confirm') | tojson }});">
+    <label>{{ t('map') }}<select name="map_id"><option value="">{{ t('all_maps') }}</option>{% for m in storage.maps %}<option value="{{ m.map_id }}">{{ m.title }} · {{ m.map_id }}</option>{% endfor %}</select></label>
+    <label>{{ t('older_than_days') }}<input type="number" min="1" max="3650" name="older_than_days" value="180" required></label>
+    <label>{{ t('confirmation') }}<input name="confirmation" placeholder="DELETE HISTORY" required></label>
+    <button class="danger-button" type="submit">{{ t('prune_object_history') }}</button>
+  </form>
+</section>
+</div>
+
+<section class="card">
+  <h2>{{ t('archived_maps') }}</h2>
+  <p class="hint">{{ t('archived_maps_help') }}</p>
+  <div class="table-wrap"><table><thead><tr><th>{{ t('map') }}</th><th>{{ t('size') }}</th><th>{{ t('confirmation') }}</th><th></th></tr></thead><tbody>
+  {% for m in storage.maps if not m.watched %}<tr>
+    <td><strong>{{ m.title }}</strong><div class="mono small">{{ m.map_id }}</div></td><td>{{ m.logical_bytes | bytesize }}</td>
+    <td><form id="purge-{{ loop.index }}" method="post" action="/settings/maintenance/archive/{{ m.map_id }}/purge" onsubmit="return confirm({{ t('delete_archive_confirm', map_id=m.map_id) | tojson }});"><input name="confirmation" placeholder="{{ m.map_id }}" required></form></td>
+    <td><button form="purge-{{ loop.index }}" class="small-btn danger-button" type="submit">{{ t('delete_archive') }}</button></td>
+  </tr>{% else %}<tr><td colspan="4" class="empty">{{ t('no_archived_maps') }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+<section class="card">
+  <div class="section-head"><h2>{{ t('upgrade_db_backups') }}</h2><span class="pill">{{ storage.database_backups|length }}</span></div>
+  <p class="hint">{{ t('upgrade_db_backups_help') }}</p>
+  <div class="table-wrap"><table><thead><tr><th>{{ t('file') }}</th><th>{{ t('size') }}</th><th>{{ t('confirmation') }}</th><th></th></tr></thead><tbody>
+  {% for b in storage.database_backups %}<tr>
+    <td class="mono small">{{ b.name }}</td><td>{{ b.size | bytesize }}</td>
+    <td><form id="dbbak-{{ loop.index }}" method="post" action="/settings/maintenance/db-backup/delete" onsubmit="return confirm({{ t('delete_upgrade_backup_confirm') | tojson }});"><input type="hidden" name="filename" value="{{ b.name }}"><input name="confirmation" placeholder="{{ b.name }}" required></form></td>
+    <td><button form="dbbak-{{ loop.index }}" class="small-btn danger-button" type="submit">{{ t('delete_backup') }}</button></td>
+  </tr>{% else %}<tr><td colspan="4" class="empty">{{ t('no_upgrade_backups') }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+<section class="card warning-card">
+  <h2>{{ t('reclaim_sqlite_space') }}</h2>
+  <p>{{ t('vacuum_text') }}</p>
+  <p class="hint">{{ t('vacuum_hint') }}</p>
+  <form method="post" action="/settings/maintenance/vacuum" class="inline-form" onsubmit="return confirm({{ t('vacuum_confirm') | tojson }});">
+    <label class="grow">{{ t('confirmation') }}<input name="confirmation" placeholder="VACUUM" required></label>
+    <button type="submit">{{ t('run_vacuum') }}</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,89 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+{% extends "base.html" %}
+{% block title %}{{ t('dashboard') }} · CalTopo History{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ t('backup_dashboard') }}</h1><p class="muted">{{ t('dashboard_intro') }}</p></div></div>
+
+{% if disk.hard_blocked %}
+<div class="alert danger"><strong>{{ t('disk_hard_title') }}</strong> {{ t('disk_hard_body', free=(disk.free_bytes | bytesize), limit=(disk.hard_free_bytes | bytesize)) }}{% if current_user.role == 'admin' %} <a href="/settings/maintenance">{{ t('open_maintenance') }}</a>.{% endif %}</div>
+{% elif disk.warning %}
+<div class="alert warning"><strong>{{ t('disk_warning_title') }}</strong> {{ t('disk_warning_body', free=(disk.free_bytes | bytesize), percent=("%.1f"|format(disk.free_percent)), limit=(disk.warning_free_bytes | bytesize)) }}{% if current_user.role == 'admin' %} <a href="/settings/maintenance">{{ t('open_maintenance') }}</a>.{% endif %}</div>
+{% endif %}
+
+<div class="stats">
+  <div class="stat"><span>{{ t('snapshots') }}</span><strong>{{ storage.snapshot_bytes | bytesize }}</strong><div class="small muted">{{ t('snapshot_count', count=storage.snapshot_count) }}</div></div>
+  <div class="stat"><span>{{ t('backup_data_total') }}</span><strong>{{ storage.logical_bytes | bytesize }}</strong><div class="small muted">{{ t('snapshots_history_current') }}</div></div>
+  <div class="stat"><span>{{ t('tool_data_total') }}</span><strong>{{ storage.tool_data_bytes | bytesize }}</strong><div class="small muted">{{ t('including_upgrade_backups', count=storage.database_backups|length) }}</div></div>
+</div>
+
+{% if current_user.role in ['admin', 'user'] %}
+<div class="grid {% if current_user.role == 'admin' %}two{% endif %}">
+<section class="card">
+  <div class="section-head"><h2>{{ t('add_map') }}</h2><a href="/maps/picker">{{ t('choose_available_maps') }}</a></div>
+  <form method="post" action="/maps" class="stack">
+    <label>{{ t('map_id_or_url') }}<input name="map_id" placeholder="{{ t('map_id_placeholder') }}" required></label>
+    <label>{{ t('map_name') }} <span class="muted small">({{ t('map_name_optional') }})</span><input name="map_title" placeholder="{{ t('map_name_placeholder') }}"></label>
+    <button type="submit">{{ t('add') }}</button>
+  </form>
+  <p class="hint">{{ t('catalog_title_hint') }}</p>
+</section>
+{% if current_user.role == 'admin' %}
+<section class="card">
+  <h2>{{ t('auto_by_name') }}</h2>
+  <form method="post" action="/rules" class="stack">
+    <label>{{ t('team_id') }}<input name="team_id" placeholder="{{ t('team_id') }}" required></label>
+    <label>{{ t('name_pattern_regex') }}<input name="pattern" placeholder="{{ t('regex_placeholder') }}" required></label>
+    <button type="submit">{{ t('add_rule') }}</button>
+  </form>
+  <p class="hint">{{ t('team_search_hint') }}</p>
+</section>
+{% endif %}
+</div>
+{% endif %}
+
+<section class="card">
+  <div class="section-head"><div><h2>{{ t('watched_maps') }}</h2><p class="hint">{{ t('global_default_interval', minutes=global_interval_seconds // 60) }}</p></div><span class="pill">{{ watches|length }}</span></div>
+  {% if watches %}
+  <div class="table-wrap"><table><thead><tr><th>{{ t('name') }}</th><th>{{ t('map_id') }}</th><th>{{ t('source') }}</th><th>{{ t('status') }}</th><th>{{ t('backup_interval') }}</th><th>{{ t('storage') }}</th><th>{{ t('last_backup') }}</th><th>{{ t('auto_pause') }}</th><th>{{ t('error') }}</th>{% if current_user.role == 'admin' %}<th>{{ t('action') }}</th>{% endif %}</tr></thead><tbody>
+  {% for w in watches %}
+  <tr>
+    <td><a href="/maps/{{ w.map_id }}"><strong>{{ w.title if w.title and w.title != w.map_id else t('not_resolved') }}</strong></a></td>
+    <td class="mono small">{{ w.map_id }}</td>
+    <td>{{ source_label(w.source) }}</td>
+    <td>{% if w.active %}<span class="status good">{{ t('active') }}</span>{% else %}<span class="status off">{{ t('paused') }}</span>{% endif %}</td>
+    <td>{% if w.poll_interval_seconds %}{{ w.poll_interval_seconds // 60 }} min <span class="muted small">{{ t('individual') }}</span>{% else %}{{ w.effective_interval_seconds // 60 }} min <span class="muted small">{{ t('global') }}</span>{% endif %}</td>
+    <td>{% if w.storage %}<strong>{{ w.storage.logical_bytes | bytesize }}</strong><div class="small muted">{{ t('snapshots') }} {{ w.storage.snapshot_bytes | bytesize }}</div>{% else %}—{% endif %}</td>
+    <td>{{ w.last_success_at | localtime }}</td>
+    <td>{{ w.auto_pause_at | localtime if w.active else "—" }}</td>
+    <td class="error-cell">{{ w.last_error or '—' }}</td>
+    {% if current_user.role == 'admin' %}<td><form method="post" action="/maps/{{ w.map_id }}/delete" onsubmit="return confirm({{ t('remove_watch_confirm') | tojson }});"><button class="small-btn danger-button" type="submit">{{ t('remove') }}</button></form></td>{% endif %}
+  </tr>
+  {% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="empty">{{ t('no_maps_registered') }}</p>{% endif %}
+</section>
+
+{% if current_user.role == 'admin' %}
+<section class="card">
+  <div class="section-head"><h2>{{ t('name_rules') }}</h2><span class="pill">{{ rules|length }}</span></div>
+  {% if rules %}
+  <div class="table-wrap"><table><thead><tr><th>{{ t('team_id') }}</th><th>Regex</th><th>{{ t('status') }}</th><th>{{ t('last_scan') }}</th><th>{{ t('action') }}</th></tr></thead><tbody>
+  {% for r in rules %}<tr>
+    <td class="mono">{{ r.team_id }}</td><td class="mono">{{ r.pattern }}</td>
+    <td>{% if r.active %}<span class="status good">{{ t('active') }}</span>{% else %}<span class="status off">{{ t('paused') }}</span>{% endif %}</td>
+    <td>{{ r.last_scan_at | localtime }}{% if r.last_error %}<div class="danger-text small">{{ r.last_error }}</div>{% endif %}</td>
+    <td class="actions"><form method="post" action="/rules/{{ r.id }}/scan"><button class="small-btn" type="submit">{{ t('scan_now') }}</button></form><form method="post" action="/rules/{{ r.id }}/toggle"><button class="small-btn ghost" type="submit">{% if r.active %}{{ t('pause') }}{% else %}{{ t('activate') }}{% endif %}</button></form></td>
+  </tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="empty">{{ t('no_name_rules') }}</p>{% endif %}
+</section>
+
+<section class="card">
+  <div class="section-head"><h2>{{ t('recent_restores') }}</h2><a href="/audit">{{ t('full_audit') }}</a></div>
+  <div class="table-wrap"><table><thead><tr><th>{{ t('time') }}</th><th>{{ t('users') }}</th><th>{{ t('action') }}</th><th>{{ t('map') }}</th><th>{{ t('object') }}</th><th>{{ t('object_id') }}</th><th>{{ t('result_details') }}</th></tr></thead><tbody>
+  {% for a in audits %}<tr><td>{{ a.created_at | localtime }}</td><td>{{ a.actor_username or t('system') }}{% if a.actor_role %}<div class="small muted">{{ a.actor_role }}</div>{% endif %}</td><td class="mono small">{{ audit_action_label(a.action) }}</td><td class="mono small">{{ a.map_id or '—' }}</td><td><strong>{{ t('whole_map') if not a.object_id else (a.object_title or '—') }}</strong></td><td class="mono small">{{ a.object_id or '—' }}</td><td class="small">{{ a.detail }}</td></tr>{% else %}<tr><td colspan="7" class="empty">{{ t('no_restores') }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endif %}
+{% endblock %}
