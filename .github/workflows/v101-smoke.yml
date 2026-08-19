@@ -1,0 +1,34 @@
+name: v1.0.1 workflow smoke
+on:
+  push:
+    branches: [v1.0.1-staging]
+    paths:
+      - '.github/workflows/v101-smoke.yml'
+permissions:
+  contents: read
+  statuses: write
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish smoke status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          payload = json.dumps({
+              "state": "success",
+              "context": "caltopo/v101-smoke",
+              "description": "v1.0.1 workflow execution available",
+              "target_url": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+          }).encode()
+          request = urllib.request.Request(
+              f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}",
+              data=payload,
+              method="POST",
+              headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}", "Accept": "application/vnd.github+json", "Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(request) as response:
+              print(response.status)
+          PY
