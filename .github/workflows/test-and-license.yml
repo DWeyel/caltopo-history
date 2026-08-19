@@ -27,12 +27,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Restore legacy support bundle and re-apply current source
-        run: |
-          tar -xzf support/ui-assets-v0.8.tar.gz
-          tar -xzf support/tests-v0.8.tar.gz
-          git checkout -- app/templates/base.html app/templates/map_picker.html app/templates/snapshot.html app/templates/login.html tests
-
       - name: Create clean virtual environment
         run: python -m venv .venv
 
