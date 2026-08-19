@@ -1,44 +1,41 @@
-# CalTopo History v0.9 — Docker deployment
-
-This package contains the complete CalTopo History v0.9 application, a Docker image definition and Docker Compose deployment.
+# CalTopo History v0.10 — Docker deployment
 
 ## Included
 
 - application source (`app/`)
 - `Dockerfile`
 - `compose.yaml`
+- optional standalone HTTPS overlay (`compose.https.yaml`, `Caddyfile`)
 - `.env.example`
+- persistent SQLite volume
 - container healthcheck
-- persistent SQLite data volume
-- non-root application runtime (UID/GID 10001 after startup initialization)
-- online SQLite backup helper (`docker/backup-db.sh`)
-- native SQLite import helper (`docker/import-db.sh`)
-- complete named-volume export helper (`docker/export-data-volume.sh`)
-- Apache and Nginx reverse-proxy examples
-- native Debian/ISPConfig deployment files under `deploy/`
+- non-root application runtime
+- database backup/import/export helpers
+- Apache/Nginx reverse-proxy examples
 
 ## Requirements
 
-- Docker Engine with Compose v2 (`docker compose`)
-- Internet access during image build for Debian/Python dependencies
+- Docker Engine with Compose v2
+- Internet access during image build
 - CalTopo Team service-account credentials
 
 ## Fresh installation
 
 ```bash
-unzip caltopo-history-v0.9-docker.zip
-cd caltopo-history-docker-v0.9
+unzip caltopo-history-v0.10-docker.zip
+cd caltopo-history-docker-v0.10
 cp .env.example .env
 nano .env
 ```
 
 Set at least:
 
-```dotenv
+```env
 CALTOPO_CREDENTIAL_ID=...
 CALTOPO_CREDENTIAL_SECRET=...
 APP_PASSWORD=...
 APP_SECRET_KEY=...
+COOKIE_SECURE=true
 ```
 
 Generate an application secret, for example:
@@ -47,13 +44,56 @@ Generate an application secret, for example:
 openssl rand -hex 48
 ```
 
-Build and start:
+### Existing reverse proxy
+
+Start the application normally:
 
 ```bash
 docker compose up -d --build
 ```
 
-Check status:
+The default host binding is `127.0.0.1:8765`. Put Apache, Nginx, Caddy, Traefik or another TLS reverse proxy in front of it.
+
+### Standalone automatic HTTPS
+
+Set a public domain in `.env`:
+
+```env
+DOMAIN=history.example.org
+COOKIE_SECURE=true
+```
+
+DNS must point to the Docker host and ports 80/tcp and 443/tcp must be reachable. Then start:
+
+```bash
+docker compose -f compose.yaml -f compose.https.yaml up -d --build
+```
+
+Caddy obtains and renews the public TLS certificate and redirects HTTP to HTTPS. CalTopo History itself remains HTTP-only on the internal Docker network. See [STANDALONE-HTTPS.md](STANDALONE-HTTPS.md).
+
+## HTTPS and login cookies — important
+
+**Production deployments must use HTTPS.** The default is:
+
+```env
+COOKIE_SECURE=true
+```
+
+This marks the login session cookie as `Secure`. Browsers **do not send Secure cookies over plain HTTP**. **Login sessions cannot work over plain HTTP when `COOKIE_SECURE=true`.**
+
+If you open CalTopo History as `http://host:8765`, the username/password can be correct but the login session cannot persist and you will be sent back to the login page. v0.10 shows an explicit warning on the login page when it detects this configuration mismatch.
+
+For a temporary trusted local HTTP-only test you may use:
+
+```env
+COOKIE_SECURE=false
+```
+
+**Do not use `COOKIE_SECURE=false` for an Internet-facing deployment.**
+
+When using a reverse proxy, the browser-facing URL must be HTTPS; the internal proxy-to-application connection may remain HTTP. Ensure the proxy forwards the original scheme (`X-Forwarded-Proto: https`).
+
+## Verify
 
 ```bash
 docker compose ps
@@ -61,89 +101,49 @@ docker compose logs --tail=100 caltopo-history
 curl http://127.0.0.1:8765/healthz
 ```
 
-Expected response:
+Expected:
 
 ```json
-{"ok":true,"version":"0.9"}
+{"ok":true,"version":"0.10"}
 ```
-
-A fresh v0.9 database uses **English** as the UI language. Change it under **Settings → Language** if desired.
-
-By default the web service is published only on `127.0.0.1:8765`. Put Apache, Nginx, Caddy, Traefik or another TLS reverse proxy in front of it. If direct network access is intentional, change `BIND_IP` in `.env`.
-
-## HTTPS and login cookies
-
-`COOKIE_SECURE=true` is recommended and requires HTTPS for browser login sessions. For a temporary local HTTP-only test:
-
-```dotenv
-COOKIE_SECURE=false
-```
-
-Do not use that setting for an Internet-facing deployment.
 
 ## Persistent data
 
-The default Compose configuration uses the named volume `caltopo_history_data`. The database is `/data/caltopo-history.db`.
+The default named volume is `caltopo_history_data`; the SQLite database is `/data/caltopo-history.db`. Normal container replacement does not delete the volume.
 
-The database, snapshots, object history, users, settings, UI language and audit log survive image/container replacement.
+**Do not use `docker compose down -v` unless you intentionally want to delete all persistent application data.**
 
 For a host bind mount instead:
 
-```dotenv
+```env
 DATA_VOLUME=./data
 ```
 
-The entrypoint initializes ownership of `/data` and then drops privileges. The application process runs as UID/GID `10001:10001`.
-
 ## Updating
 
-Create a consistent online backup first:
+Create an online backup first:
 
 ```bash
 ./docker/backup-db.sh
 ```
 
-Then rebuild/recreate:
+Then rebuild/recreate. For the standard deployment:
 
 ```bash
 docker compose build --pull
 docker compose up -d
 ```
 
-Schema/settings migrations run automatically at application startup. The persistent volume is not removed by `docker compose down` unless `-v` is explicitly supplied.
-
-**Do not use `docker compose down -v` unless you intentionally want to delete the Docker volume and all application data.**
-
-## Import an existing native installation
-
-Copy the existing SQLite database to the Docker host, copy the relevant environment values into `.env`, build the image and run:
+For standalone HTTPS:
 
 ```bash
-docker compose build
-./docker/import-db.sh /path/to/caltopo-history.db
+docker compose -f compose.yaml -f compose.https.yaml build --pull
+docker compose -f compose.yaml -f compose.https.yaml up -d
 ```
 
-The application performs its normal migration when the container starts. For the cleanest migration, stop the native service before copying the SQLite file. If it must remain running, use SQLite's online backup mechanism instead of copying only the `.db` file while WAL mode may be active.
+## Reverse-proxy examples
 
-## Database backup
-
-```bash
-./docker/backup-db.sh
-```
-
-This creates a backup in the Docker volume (visible in Maintenance) and copies it to host-side `./backups/`.
-
-## Full data-volume export
-
-```bash
-./docker/export-data-volume.sh
-```
-
-This writes a compressed disaster-recovery archive to `./backups/`.
-
-## Reverse proxy
-
-Apache example (`docker/apache-reverse-proxy.conf`):
+Apache:
 
 ```apache
 ProxyPreserveHost On
@@ -152,7 +152,7 @@ ProxyPassReverse / http://127.0.0.1:8765/
 RequestHeader set X-Forwarded-Proto "https"
 ```
 
-Nginx example (`docker/nginx-reverse-proxy.conf`):
+Nginx:
 
 ```nginx
 location / {
@@ -167,37 +167,18 @@ location / {
 
 ## Why one Uvicorn worker?
 
-CalTopo History contains its own scheduler in the FastAPI lifespan. Multiple Uvicorn workers would start multiple schedulers and could poll/write backups concurrently. The container deliberately starts exactly one worker.
+CalTopo History contains its own scheduler. Multiple Uvicorn workers would start multiple schedulers and could poll/write concurrently, so the container deliberately starts one worker.
 
 ## Security defaults
 
-- web port binds to localhost by default
-- runtime application process is non-root
-- root filesystem is read-only under Compose
-- `/tmp` is an in-memory tmpfs
-- persistent writes are limited to `/data`
-- `APP_SECRET_KEY` and initial `APP_PASSWORD` are required
-- HTTPS secure cookies are enabled by default
-- image includes a healthcheck
+- localhost-only application port by default
+- non-root runtime process
+- read-only root filesystem under Compose
+- `/tmp` as tmpfs
+- persistent writes limited to `/data`
+- secure cookies enabled by default
+- healthcheck included
 
-The container starts as root only long enough to ensure `/data` is writable by UID/GID 10001, then drops privileges before starting Uvicorn.
+## Container compliance
 
-## Disk-space protection
-
-The application evaluates the filesystem backing `/data`. Configurable warning and hard-stop thresholds are available in Settings. Below the hard threshold new backup/snapshot writes are blocked and resume automatically when free space recovers.
-
-## License and source-code link
-
-CalTopo History v0.9 is licensed under `AGPL-3.0-only`. The web UI displays the configured source-code location. The default is the upstream GitHub repository. If you run a modified version, set `SOURCE_CODE_URL` to the Corresponding Source for that deployed version.
-
-## Map tile provider
-
-The default is the OpenStreetMap community raster tile service. Configure another provider when required:
-
-```env
-MAP_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
-MAP_TILE_ATTRIBUTION='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-MAP_TILE_MAX_ZOOM=19
-```
-
-The OpenStreetMap community tile service is best-effort and intended for modest interactive use. It must not be used for bulk downloads, prefetching or offline tile generation. See `THIRD-PARTY-NOTICES.md`.
+The repository workflow builds the image, generates an SPDX JSON SBOM with Syft and produces JSON plus human-readable Trivy license reports. Review those artifacts before publishing a binary image.

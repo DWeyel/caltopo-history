@@ -1,4 +1,4 @@
-# CalTopo History v0.9
+# CalTopo History v0.10
 
 Self-hosted backup, version history, restore and audit web application for collaborative CalTopo maps.
 
@@ -6,37 +6,62 @@ Self-hosted backup, version history, restore and audit web application for colla
 
 ## Main features
 
-- Monitor CalTopo maps by Map ID or select multiple maps from the visible team catalog.
-- Mirror the visible CalTopo account/folder structure in the map picker and show owner, sharing state and last catalog update time where available.
-- Keep same-title maps with different Map IDs separate and de-duplicate repeated occurrences of the same Map ID.
-- On-demand map preview using the current CalTopo objects over a configurable basemap.
-- Automatically enroll maps using Team ID + regular-expression rules.
-- Global backup interval with optional per-map overrides.
-- Change-driven compressed snapshots and per-object history; unchanged polls do not create snapshots.
-- Detect changes to existing object geometry/properties, not only additions and deletions.
-- Create one closing snapshot 30 minutes after the last detected change, then stay quiet until another change occurs.
-- Automatically pause a map watch seven days after enrollment; manual reactivation starts a new seven-day window.
-- Current-object overview with existence/restored status, last-change timestamp and live title filter.
-- Compare any two snapshots and show added, removed and changed objects.
-- Restore historical Marker/Shape versions and roll a map back to a selected snapshot for supported object types.
-- Restore audit with user, role, client IP, map/object identifiers and object title.
-- Multi-user roles: Admin, User and View. The literal `admin` account is protected against deletion, disabling and role changes.
-- Settings hub with user management, restore audit and maintenance.
-- Storage reporting and maintenance tools, including snapshot pruning and SQLite `VACUUM`.
-- Configurable disk-space warning and hard-stop thresholds.
-- Responsive phone/tablet layout and light/dark theme.
+- Monitor selected CalTopo maps and maintain change-aware snapshots plus per-object history.
+- Avoid duplicate snapshots when the map state has not changed.
+- Create a closing snapshot after the configured quiet period following changes.
+- Compare snapshots and identify added, removed and modified objects.
+- Restore supported historical objects or roll a map back to a selected snapshot.
+- Maintain a restore audit trail with user, role, client IP and object/map context.
+- Discover/select maps from the visible Team catalog and preserve CalTopo folder/account structure where available.
+- Configurable global/per-map monitoring intervals and automatic watch expiration.
+- Multi-user roles: Admin, User and View.
+- Storage reporting, retention/maintenance tools and disk-space safety thresholds.
+- Responsive UI with light/dark mode.
 - English and German UI; fresh installations default to English.
-- All UI timestamps use `Europe/Berlin` and show CET/CEST correctly.
-- Snapshot GeoJSON download.
+- Configurable map tile provider and on-demand map preview.
+- Docker and native Debian/ISPConfig deployment options.
+- Optional standalone HTTPS deployment with Caddy.
+- SPDX SBOM/container-license scanning and runtime dependency-license CI checks.
+
+## HTTPS / secure-cookie warning
+
+CalTopo History defaults to:
+
+```env
+COOKIE_SECURE=true
+```
+
+This is the correct production setting, but it **requires the browser-facing URL to use HTTPS**. Browsers do not send Secure cookies over plain HTTP. If the application is opened as `http://...` while `COOKIE_SECURE=true`, valid credentials can be accepted but the login session cannot persist and the browser returns to the login page.
+
+v0.10 displays an explicit warning on the login page when it detects this mismatch.
+
+Use HTTPS for production. Set `COOKIE_SECURE=false` only for a temporary trusted local/test HTTP deployment.
+
+Docker installations can either use an existing reverse proxy or the included optional Caddy overlay. See [Docker deployment](README-DOCKER.md) and [Standalone HTTPS](STANDALONE-HTTPS.md).
 
 ## Documentation
 
 - [Feature brief](FEATURE-BRIEF.md)
-- [Release notes for v0.9](RELEASE-NOTES-v0.9.md)
-- [Third-party notices and license review](THIRD-PARTY-NOTICES.md)
-- [Container compliance / SBOM](CONTAINER-COMPLIANCE.md)
+- [Release notes for v0.10](RELEASE-NOTES-v0.10.md)
 - [Docker deployment](README-DOCKER.md)
+- [Standalone HTTPS with Caddy](STANDALONE-HTTPS.md)
 - [Native Debian 12 / ISPConfig deployment](README-DEBIAN-ISPConfig.md)
+- [Third-party notices and license review](THIRD-PARTY-NOTICES.md)
+- [Container compliance](CONTAINER-COMPLIANCE.md)
+
+## Language settings
+
+Open **Settings → Backup & CalTopo → Language** and select English or German. Date formatting follows the selected language while retaining the configured `Europe/Berlin` timezone.
+
+## CalTopo permissions
+
+- Explicit Map-ID backup: at least READ in the current implementation.
+- Restore/write-back requires suitable CalTopo write permission for the affected map objects.
+- Team catalog, picker, title synchronization and regex discovery use the permissions granted to the configured service account; the application does not hard-code a specific CalTopo role requirement.
+
+## Restore limitation
+
+The application writes only object classes covered by the implemented CalTopo write API paths: `Marker` and `Shape`. Other object classes remain in backup history but are not written back through undocumented endpoints.
 
 ## License
 
@@ -44,60 +69,8 @@ CalTopo History is licensed under the **GNU Affero General Public License v3.0 o
 
 Copyright © 2026 Dennis Weyel.
 
-See [LICENSE](LICENSE) for the GNU AGPLv3 license text.
+See [LICENSE](LICENSE). The web interface exposes the license, no-warranty notice and a configurable source-code link. Operators of modified network deployments should set `SOURCE_CODE_URL` to the Corresponding Source for the version actually running.
 
-The web interface exposes the license, no-warranty notice and a **Source code** link. `SOURCE_CODE_URL` must point to the corresponding source for the version actually deployed. This is especially important for modified versions offered to users over a network.
+## Container compliance
 
-## Third-party components
-
-The current Python runtime dependency stack, Leaflet and the default OpenStreetMap basemap integration were reviewed for v0.9. No blocking license incompatibility was identified in the reviewed stack. Third-party components remain under their own licenses; details and operator obligations are documented in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
-
-CI includes a conservative runtime dependency-license check so newly resolved license families require review before being accepted.
-
-## Container SBOM and license scanning
-
-Changes that affect the Docker image trigger a dedicated **Container compliance** GitHub Actions workflow. It builds the current image, generates an **SPDX JSON SBOM with Syft**, performs a **full container license scan with Trivy**, and uploads the reports as workflow artifacts.
-
-The container scan is intentionally review-oriented rather than treating every reciprocal or GPL-family package as a build failure. Debian-based images legitimately contain operating-system components under a variety of licenses; scanner classifications are evidence for review, not by themselves a legal compatibility decision.
-
-Before publishing a binary container image, review and retain the generated SBOM and Trivy license report. See [CONTAINER-COMPLIANCE.md](CONTAINER-COMPLIANCE.md) for the release checklist.
-
-## Basemap / OpenStreetMap
-
-The map preview defaults to the OpenStreetMap community tile service and displays OpenStreetMap attribution. The tile provider is configurable with:
-
-```text
-MAP_TILE_URL
-MAP_TILE_ATTRIBUTION
-MAP_TILE_MAX_ZOOM
-```
-
-The default community tile service is intended for normal interactive viewing, not bulk downloading, scraping, prefetching or offline tile generation. Deployments with significant traffic, strict availability requirements, or sensitive operational use should configure an appropriate provider or self-hosted tile service. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
-
-## Language settings
-
-Open **Settings → Backup & CalTopo → Language** and select English or German. Fresh installations default to English.
-
-## Deployment options
-
-### Docker / Docker Compose
-
-See [README-DOCKER.md](README-DOCKER.md).
-
-### Debian 12 + ISPConfig
-
-See [README-DEBIAN-ISPConfig.md](README-DEBIAN-ISPConfig.md).
-
-## CalTopo permissions
-
-- Explicit Map-ID backup: at least READ in the current implementation.
-- Restore/write-back requires suitable CalTopo write permission for the affected map objects.
-- Team catalog, picker, title synchronization and regex discovery use the permissions actually granted to the configured service account; the application does not hard-code a specific CalTopo role requirement.
-
-## Restore limitation
-
-The application writes only object classes covered by the implemented CalTopo write API paths: `Marker` and `Shape`. Other object classes remain in backup history but are not written back through undocumented endpoints.
-
-## Security note
-
-CalTopo service-account credentials remain server-side. Deploy the application behind HTTPS, use strong application credentials, keep the source-code link correct for the deployed version, and review the privacy implications of any external basemap provider used by browser clients.
+GitHub Actions builds the release-equivalent application image, generates an SPDX JSON SBOM with Syft and creates Trivy container-license reports. The runtime Python dependency-license audit remains a hard CI gate for newly introduced license families. Review the generated artifacts before publishing binary container images.
