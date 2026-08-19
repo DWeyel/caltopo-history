@@ -1,0 +1,34 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+{% extends "base.html" %}
+{% block title %}{{ t('user_management') }} · CalTopo History{% endblock %}
+{% block content %}
+<nav class="crumb"><a href="/settings">← {{ t('settings') }}</a></nav>
+<div class="page-head"><div><h1>{{ t('user_management') }}</h1><p class="muted">{{ t('user_roles_intro') }}</p></div></div>
+<section class="card">
+  <h2>{{ t('create_user') }}</h2>
+  <form method="post" action="/users" class="user-create-grid">
+    <label>{{ t('username') }}<input name="username" required></label>
+    <label>{{ t('password') }}<input type="password" name="password" minlength="12" required></label>
+    <label>{{ t('role') }}<select name="role"><option value="user">User</option><option value="view">View</option><option value="admin">Admin</option></select></label>
+    <button type="submit">{{ t('create_user') }}</button>
+  </form>
+</section>
+{% for u in users %}
+<section class="card user-card">
+  <div class="section-head"><div><h2>{{ u.username }}</h2><p class="hint">{{ t('last_login') }}: {{ u.last_login_at | localtime }}</p></div><div>{% if u.active %}<span class="status good">{{ t('active') }}</span>{% else %}<span class="status off">{{ t('disabled') }}</span>{% endif %}</div></div>
+  {% if u.username|lower == 'admin' %}
+    <div class="alert info"><strong>{{ t('protected_admin_title') }}</strong> {{ t('protected_admin_text') }}</div>
+    {% if u.id == current_user.id %}
+    <form method="post" action="/users/{{ u.id }}/password" class="stack compact"><label>{{ t('own_new_password') }}<input type="password" name="password" minlength="12" required></label><button type="submit">{{ t('change_own_password') }}</button></form>
+    {% endif %}
+  {% else %}
+  <div class="user-edit-grid">
+    <form method="post" action="/users/{{ u.id }}/role" class="stack compact"><label>{{ t('role') }}<select name="role"><option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Admin</option><option value="user" {% if u.role == 'user' %}selected{% endif %}>User</option><option value="view" {% if u.role == 'view' %}selected{% endif %}>View</option></select></label><button type="submit">{{ t('save_role') }}</button></form>
+    <form method="post" action="/users/{{ u.id }}/password" class="stack compact"><label>{{ t('new_password') }}<input type="password" name="password" minlength="12" required></label><button type="submit">{{ t('set_password') }}</button></form>
+    <div class="stack compact user-actions"><span class="muted small">{{ t('status_delete') }}</span>{% if u.id != current_user.id %}<form method="post" action="/users/{{ u.id }}/toggle"><button class="ghost" type="submit">{% if u.active %}{{ t('deactivate') }}{% else %}{{ t('activate') }}{% endif %}</button></form>{% else %}<span class="muted small">{{ t('current_user') }}</span>{% endif %}{% if u.id != current_user.id %}<form method="post" action="/users/{{ u.id }}/delete" onsubmit="return confirm({{ t('delete_user_confirm', username=u.username) | tojson }});"><button class="danger-button" type="submit">{{ t('delete_user') }}</button></form>{% endif %}</div>
+  </div>
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

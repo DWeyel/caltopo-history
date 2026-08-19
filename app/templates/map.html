@@ -1,0 +1,74 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+{% extends "base.html" %}
+{% block title %}{{ watch.title or watch.map_id }} · CalTopo History{% endblock %}
+{% block content %}
+<nav class="crumb"><a href="/">← {{ t('dashboard') }}</a></nav>
+<div class="page-head"><div><h1>{{ watch.title if watch.title and watch.title != watch.map_id else t('not_resolved') }}</h1><div class="mono muted">{{ watch.map_id }}</div></div><div class="actions">{% if current_user.role in ['admin','user'] %}<form method="post" action="/maps/{{ watch.map_id }}/backup"><button type="submit">{{ t('snapshot_now') }}</button></form>{% endif %}{% if current_user.role == 'admin' %}<form method="post" action="/maps/{{ watch.map_id }}/toggle"><button class="ghost" type="submit">{% if watch.active %}{{ t('pause') }}{% else %}{{ t('activate') }}{% endif %}</button></form><form method="post" action="/maps/{{ watch.map_id }}/delete" onsubmit="return confirm({{ t('remove_monitoring_confirm') | tojson }});"><button class="danger-button" type="submit">{{ t('remove_monitoring') }}</button></form>{% endif %}<a class="button ghost" target="_blank" rel="noopener" href="https://caltopo.com/m/{{ watch.map_id }}">{{ t('open_in_caltopo') }}</a></div></div>
+<div class="stats"><div class="stat"><span>{{ t('status') }}</span><strong>{% if watch.active %}{{ t('active') }}{% else %}{{ t('paused') }}{% endif %}</strong></div><div class="stat"><span>{{ t('last_backup') }}</span><strong>{{ watch.last_success_at | localtime }}</strong></div><div class="stat"><span>{{ t('backup_interval') }}</span><strong>{{ effective_interval_seconds // 60 }} min</strong><div class="small muted">{% if watch.poll_interval_seconds %}{{ t('individual') }}{% else %}{{ t('global') }}{% endif %}</div></div><div class="stat"><span>{{ t('auto_pause') }}</span><strong>{{ watch.auto_pause_at | localtime if watch.active else t('paused') }}</strong></div><div class="stat"><span>{{ t('polls') }}</span><strong>{{ watch.poll_count }}</strong></div><div class="stat"><span>{{ t('backup_storage') }}</span><strong>{{ map_storage.logical_bytes | bytesize if map_storage else "0 B" }}</strong><div class="small muted">{{ t('snapshots') }} {{ map_storage.snapshot_bytes | bytesize if map_storage else "0 B" }}</div></div></div>
+{% if watch.last_error %}<div class="alert danger"><strong>{{ t('last_error') }}:</strong> {{ watch.last_error }}</div>{% endif %}
+
+{% if current_user.role == 'admin' %}
+<div class="grid two">
+<section class="card">
+  <h2>{{ t('custom_backup_interval') }}</h2>
+  <form method="post" action="/maps/{{ watch.map_id }}/interval" class="inline-form">
+    <label class="grow">{{ t('minutes') }} <span class="muted small">({{ t('empty_zero_global', minutes=global_interval_seconds // 60) }})</span><input type="number" min="0" max="10080" name="interval_minutes" value="{{ watch.poll_interval_seconds // 60 if watch.poll_interval_seconds else '' }}" placeholder="{{ t('global') }}"></label>
+    <button type="submit">{{ t('save') }}</button>
+  </form>
+</section>
+<section class="card">
+  <h2>{{ t('display_name') }}</h2>
+  <form method="post" action="/maps/{{ watch.map_id }}/title" class="inline-form">
+    <label class="grow">{{ t('name') }}<input name="title" value="{{ watch.title }}" placeholder="{{ t('map_name_placeholder') }}" required></label>
+    <button type="submit">{{ t('save') }}</button>
+  </form>
+  <p class="hint">{{ t('display_name_hint') }}</p>
+</section>
+</div>
+{% endif %}
+
+<section class="card">
+  <div class="section-head"><h2>{{ t('current_objects') }}</h2><span class="pill">{{ objects|length }}</span></div>
+  <label class="object-filter">{{ t('filter_objects') }}<input id="object-filter" type="search" placeholder="{{ t('filter_placeholder') }}" autocomplete="off"></label>
+  <div class="table-wrap"><table><thead><tr><th>{{ t('present') }}</th><th>{{ t('type') }}</th><th>{{ t('title') }}</th><th>{{ t('object_id') }}</th><th>{{ t('last_change') }}</th><th></th></tr></thead><tbody id="object-table-body">
+  {% for o in objects %}<tr data-object-title="{{ (o.title or '')|lower|e }}" class="{% if not o.exists_now %}row-muted{% endif %}"><td>{% if o.status == 'restored' %}<span class="status warning">{{ t('restored') }}</span>{% elif o.exists_now %}<span class="status good">{{ t('yes') }}</span>{% else %}<span class="status bad">{{ t('deleted') }}</span>{% endif %}</td><td>{{ o.object_type }}</td><td>{{ o.title or '—' }}</td><td class="mono small">{{ o.object_id }}</td><td>{{ o.last_change_at | localtime }}</td><td><a href="/maps/{{ watch.map_id }}/objects/{{ o.object_id }}">{{ t('history') }}</a></td></tr>{% else %}<tr><td colspan="6" class="empty">{{ t('no_objects_known') }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+
+<section class="card">
+  <div class="section-head"><h2>{{ t('compare_snapshots') }}</h2><span class="pill">A → B</span></div>
+  {% if snaps|length >= 2 %}
+  <form method="get" action="/maps/{{ watch.map_id }}/compare" class="compare-grid">
+    <label>{{ t('snapshot_a') }}<select name="snapshot_a" required>{% for s in snaps %}<option value="{{ s.id }}" {% if loop.index == 2 %}selected{% endif %}>#{{ s.id }} · {{ s.captured_at | localtime }} · {{ t('object_count', count=s.object_count) }}</option>{% endfor %}</select></label>
+    <label>{{ t('snapshot_b') }}<select name="snapshot_b" required>{% for s in snaps %}<option value="{{ s.id }}" {% if loop.index == 1 %}selected{% endif %}>#{{ s.id }} · {{ s.captured_at | localtime }} · {{ t('object_count', count=s.object_count) }}</option>{% endfor %}</select></label>
+    <button type="submit">{{ t('compare') }}</button>
+  </form>
+  {% else %}<p class="empty">{{ t('need_two_snapshots') }}</p>{% endif %}
+</section>
+
+<section class="card">
+  <div class="section-head"><h2>{{ t('snapshots') }}</h2><span class="pill">{{ snaps|length }}</span></div>
+  <div class="table-wrap"><table><thead><tr><th>{{ t('time') }}</th><th>{{ t('reason') }}</th><th>{{ t('objects') }}</th><th>{{ t('size') }}</th><th>{{ t('server_ts') }}</th><th></th></tr></thead><tbody>
+  {% for s in snaps %}<tr><td>{{ s.captured_at | localtime }}</td><td>{{ reason_label(s.reason) }}</td><td>{{ s.object_count }}</td><td>{{ s.storage_bytes | bytesize }}</td><td class="mono small">{{ s.server_timestamp }}</td><td><a href="/snapshots/{{ s.id }}">{{ t('view_restore') }}</a></td></tr>{% else %}<tr><td colspan="6" class="empty">{{ t('no_snapshots') }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const input = document.getElementById('object-filter');
+  const body = document.getElementById('object-table-body');
+  if (!input || !body) return;
+  const rows = Array.from(body.querySelectorAll('tr[data-object-title]'));
+  input.addEventListener('input', () => {
+    const q = input.value.trim().toLocaleLowerCase({{ ('de-DE' if language == 'de' else 'en-US') | tojson }});
+    for (const row of rows) {
+      const title = (row.dataset.objectTitle || '').toLocaleLowerCase({{ ('de-DE' if language == 'de' else 'en-US') | tojson }});
+      row.hidden = q.length > 0 && !title.includes(q);
+    }
+  });
+})();
+</script>
+{% endblock %}

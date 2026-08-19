@@ -1,6 +1,6 @@
 # Standalone HTTPS with Caddy
 
-CalTopo History can use an existing reverse proxy or the optional Caddy Compose overlay included with v0.10.
+CalTopo History can use an existing reverse proxy or the optional Caddy Compose overlay included with v1.0.
 
 ## Why Caddy is separate
 
@@ -12,8 +12,8 @@ Caddy supports automatic HTTPS for public DNS names and automatically renews man
 
 - a public DNS name, for example `history.example.org`
 - A/AAAA DNS records pointing to the Docker host
-- inbound port 80/tcp available for ACME/HTTP redirect
-- inbound port 443/tcp available for HTTPS
+- inbound port 80/tcp available
+- inbound port 443/tcp available
 - optional 443/udp for HTTP/3
 - `COOKIE_SECURE=true`
 
@@ -42,11 +42,11 @@ Do not append `-v` unless you intentionally want to delete the application and C
 
 ## Existing reverse proxy
 
-Do not use the Caddy overlay if Apache, Nginx, Traefik, ISPConfig or another service already owns ports 80/443. Use the standard `compose.yaml` and configure that existing proxy to forward to `127.0.0.1:8765` with `X-Forwarded-Proto: https`.
+Do not use the Caddy overlay if Apache, Nginx, Traefik, ISPConfig or another service already owns ports 80/443. Use the standard `compose.yaml` and configure the existing proxy to forward to `127.0.0.1:8765` with `X-Forwarded-Proto: https`.
 
 ## Cookie behavior
 
-`COOKIE_SECURE=true` is required for a normal secure production deployment. A Secure cookie cannot be used over plain HTTP. If the browser URL is `http://...`, correct login credentials cannot produce a persistent session. v0.10 warns about this directly on the login page.
+`COOKIE_SECURE=true` is required for a normal secure production deployment. A Secure cookie cannot be used over plain HTTP. If the browser URL is `http://...`, correct login credentials cannot produce a persistent session. v1.0 warns about this directly on the login page.
 
 ## Caddy license
 

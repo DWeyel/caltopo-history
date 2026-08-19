@@ -3,15 +3,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: caltopo-history:0.10
+    image: "${IMAGE_REF:-caltopo-history:1.0}"
     container_name: caltopo-history
     restart: unless-stopped
     environment:
-      CALTOPO_CREDENTIAL_ID: "${CALTOPO_CREDENTIAL_ID:?Set CALTOPO_CREDENTIAL_ID in .env}"
-      CALTOPO_CREDENTIAL_SECRET: "${CALTOPO_CREDENTIAL_SECRET:?Set CALTOPO_CREDENTIAL_SECRET in .env}"
+      CALTOPO_CREDENTIAL_ID: "${CALTOPO_CREDENTIAL_ID:-}"
+      CALTOPO_CREDENTIAL_SECRET: "${CALTOPO_CREDENTIAL_SECRET:-}"
       APP_USERNAME: "${APP_USERNAME:-admin}"
-      APP_PASSWORD: "${APP_PASSWORD:?Set APP_PASSWORD in .env}"
-      APP_SECRET_KEY: "${APP_SECRET_KEY:?Set APP_SECRET_KEY in .env}"
+      APP_PASSWORD: "${APP_PASSWORD:-}"
+      INITIAL_ADMIN_PASSWORD_FILE: "/data/.initial-admin-password"
+      APP_SECRET_KEY: "${APP_SECRET_KEY:-}"
+      APP_SECRET_KEY_FILE: "/data/.app-secret-key"
       COOKIE_SECURE: "${COOKIE_SECURE:-true}"
       POLL_INTERVAL_SECONDS: "${POLL_INTERVAL_SECONDS:-60}"
       DISCOVERY_INTERVAL_SECONDS: "${DISCOVERY_INTERVAL_SECONDS:-300}"

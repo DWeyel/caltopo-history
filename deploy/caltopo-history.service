@@ -16,6 +16,8 @@ Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
 UMask=0077
+
+# systemd sandboxing
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true

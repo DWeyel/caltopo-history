@@ -1,6 +1,6 @@
 # Third-Party Notices and License Review
 
-This document records the dependency and map-provider license review performed for CalTopo History v0.9 on 2026-08-19.
+This document records the dependency and map-provider license review performed for CalTopo History 1.0 on 2026-08-19.
 
 CalTopo History itself is licensed under **GNU Affero General Public License v3.0 only (`AGPL-3.0-only`)**. Third-party components remain under their own licenses.
 
@@ -15,8 +15,9 @@ CalTopo History itself is licensed under **GNU Affero General Public License v3.
 | Jinja2 | BSD-3-Clause | HTML templating |
 | python-multipart | Apache-2.0 | Form/multipart parsing |
 | ItsDangerous | BSD-3-Clause | Signed session data support |
+| cryptography | Apache-2.0 OR BSD-3-Clause | Encryption of UI-managed CalTopo credential secrets |
 
-The MIT, BSD and Apache-2.0 licenses used by these direct dependencies are compatible with distributing CalTopo History under AGPLv3. Third-party dependency source remains under its original license.
+The MIT, BSD and Apache-2.0 licenses used by these direct dependencies are compatible with distributing CalTopo History under AGPLv3. Apache-2.0 is compatible with GPLv3-family licensing; the project does not copy or relicense the dependency source files.
 
 ## Significant transitive Python dependencies
 
@@ -26,11 +27,6 @@ The exact resolved dependency graph can vary because `requirements.txt` intentio
 |---|---|
 | Starlette | BSD-3-Clause |
 | Pydantic | MIT |
-| Pydantic Core | MIT |
-| Annotated Types | MIT |
-| Annotated Doc | MIT |
-| Typing Inspection | MIT |
-| Typing Extensions | PSF-2.0 |
 | AnyIO | MIT |
 | HTTPcore | BSD-3-Clause |
 | certifi | MPL-2.0 |
@@ -46,11 +42,9 @@ The exact resolved dependency graph can vary because `requirements.txt` intentio
 | MarkupSafe | BSD-3-Clause |
 | greenlet | MIT AND PSF-2.0 |
 
-MPL-2.0 provides a secondary-license mechanism that includes GNU AGPLv3 unless the specific MPL-covered software is marked incompatible with secondary licenses. The current `certifi` dependency is consumed separately and remains under MPL-2.0.
+MPL-2.0 provides compatibility with GNU AGPLv3 through its secondary-license mechanism unless a specific MPL-covered component opts out using an "Incompatible With Secondary Licenses" notice. The certifi package is consumed as a separate dependency and remains under MPL-2.0.
 
-Because dependency versions can change within the declared ranges, maintainers must repeat the license review when changing dependency ranges or preparing a materially new public release. CI includes a conservative runtime-license check that fails when a newly resolved dependency advertises a license family that has not been reviewed.
-
-A prebuilt container image also contains Debian/Python runtime components with their own licenses. If public binary container images are published, an image-level SBOM/license scan should be added to the release process.
+Because dependency versions can change within the declared ranges, maintainers should repeat the license review when changing dependency ranges or preparing a materially new public release. A prebuilt container image also contains Debian/Python runtime components with their own licenses; those are separate from the application source license and should be covered by an image-level SBOM/license scan if binary images are published.
 
 ## Leaflet
 
@@ -66,16 +60,16 @@ The default preview basemap uses:
 
 `https://tile.openstreetmap.org/{z}/{x}/{y}.png`
 
-OpenStreetMap data is available under the **Open Data Commons Open Database License (ODbL)**. The application displays visible map attribution linking to the OpenStreetMap copyright/license page.
+OpenStreetMap data is available under the **Open Data Commons Open Database License (ODbL)**. The application displays a visible map attribution linking to the OpenStreetMap copyright/license page.
 
 Use of the community-operated `tile.openstreetmap.org` service is subject to the OpenStreetMap Foundation Tile Usage Policy. In particular:
 
-- it is suitable for normal interactive human viewing under the policy;
+- it is intended for normal interactive human viewing;
 - bulk downloading, scraping, prefetching and offline tile generation are not allowed;
 - browser caching must not be intentionally bypassed;
 - a valid browser Referer must be allowed to reach the tile service;
 - the service is best-effort and has no SLA;
-- deployments with material traffic or stricter availability/privacy requirements should use another provider or self-host tiles.
+- higher-volume deployments should use another provider or self-host tiles.
 
 CalTopo History does not implement tile prefetching or offline tile downloads. Tiles are requested directly by the user's browser only for the active map preview/snapshot view.
 
@@ -100,3 +94,8 @@ CalTopo History is an independent integration project. CalTopo and SARTopo are t
 ## No warranty
 
 Third-party licenses contain their own warranty and liability disclaimers. CalTopo History is likewise provided without warranty under the terms of the AGPL-3.0-only license.
+
+
+## Optional Caddy HTTPS proxy
+
+The optional standalone HTTPS Compose overlay references the official Caddy container image (`caddy:2-alpine`). Caddy is licensed under Apache-2.0 and is not incorporated into the CalTopo History application image. It is used as a separate reverse-proxy/TLS service. Operators remain responsible for the licenses of the exact container image they deploy.

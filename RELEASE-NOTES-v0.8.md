@@ -23,19 +23,58 @@ The selected language is stored in the application database and applies globally
 
 ## Translated areas
 
-The translation layer covers the complete application UI, including login, navigation, map management, previews, object history, restores, settings, user management, audit, maintenance, disk-space warnings, confirmation dialogs and application-generated messages.
+The translation layer covers the complete application UI, including:
+
+- login
+- header/navigation/footer
+- dashboard
+- map management
+- available-map picker
+- map preview controls and messages
+- current-object view
+- snapshot list and comparison
+- object history
+- object restore
+- point-in-time rollback
+- settings
+- user management
+- restore audit
+- maintenance
+- disk-space warnings and backup lock status
+- confirmation dialogs
+- application-generated success, warning and error messages
+
+Technical data originating directly from external systems or stored raw audit details is preserved as supplied rather than rewritten.
 
 ## Language-aware date display
 
-Timestamps continue to use `Europe/Berlin` and correctly display CET/CEST.
+Timestamps continue to use the configured `Europe/Berlin` timezone and correctly display CET/CEST.
+
+Formatting now follows the selected UI language:
 
 - English: `YYYY-MM-DD HH:MM:SS CET/CEST`
 - German: `DD.MM.YYYY HH:MM:SS CET/CEST`
 
 ## Deployment
 
-v0.8 remains available for Docker / Docker Compose and native Debian 12 + systemd / ISPConfig reverse-proxy deployments.
+v0.8 remains available for:
+
+- Docker / Docker Compose
+- native Debian 12 + systemd
+- ISPConfig reverse-proxy deployments
+
+Existing v0.7 databases are migrated automatically when the application starts.
 
 ## Compatibility
 
-All existing v0.7 data is retained, including users and roles, monitored maps, snapshots, object histories, settings, restore audit entries and maintenance data.
+All existing v0.7 data is retained, including:
+
+- users and roles
+- monitored maps
+- snapshots
+- object histories
+- application settings
+- restore audit entries
+- maintenance data
+
+No destructive schema migration is required for the language feature.

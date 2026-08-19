@@ -12,7 +12,7 @@ def test_v10_login_warning_and_standalone_https_files():
     docker_readme = (root / "README-DOCKER.md").read_text()
     caddyfile = (root / "Caddyfile").read_text()
     https_compose = (root / "compose.https.yaml").read_text()
-    assert APP_VERSION == "0.10"
+    assert APP_VERSION == "1.0"
     assert "settings.cookie_secure" in login
     assert "request.url.scheme != 'https'" in login
     assert "Login sessions cannot persist" in login

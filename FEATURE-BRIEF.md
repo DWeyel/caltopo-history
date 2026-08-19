@@ -65,20 +65,19 @@ The web interface includes:
 - light and dark themes;
 - responsive phone/tablet layouts;
 - on-demand map previews;
-- settings, user administration, restore audit and maintenance views.
+- settings, user administration, restore audit and maintenance views;
+- in-app CalTopo service-account configuration, including encrypted replace-only Credential Secret handling and service defaults.
 
 ## Deployment
 
 CalTopo History supports:
 
-- **Docker / Docker Compose** with persistent storage, health checks, non-root runtime and read-only root filesystem;
-- **native Debian 12 / ISPConfig** deployment using a Python virtual environment, systemd, SQLite and a reverse proxy.
+- **Docker / Docker Compose** with persistent storage, health checks, non-root runtime, read-only root filesystem and automatic first-install application-secret/admin-password generation;
+- **native Debian 12 / ISPConfig** deployment using a Python virtual environment, systemd, SQLite and a reverse proxy, with automatic first-install application-secret/admin-password generation.
 
 ## Open-source model
 
 Starting with v0.9, CalTopo History is licensed under **AGPL-3.0-only**. This keeps the software freely usable and modifiable while requiring operators of modified network-served versions to make the corresponding modified source available to their users.
-
-The web interface contains a source-code link so operators can point users to the Corresponding Source for the deployed version. Third-party dependency and map-provider licensing is documented separately in `THIRD-PARTY-NOTICES.md`.
 
 ## Operational value
 

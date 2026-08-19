@@ -1,0 +1,17 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+{% extends "base.html" %}
+{% block title %}{{ t('object_history') }} · CalTopo History{% endblock %}
+{% block content %}
+<nav class="crumb"><a href="/maps/{{ map_id }}">← {{ t('map') }}</a></nav>
+<div class="page-head"><div><h1>{{ t('object_history') }}</h1><div class="mono muted">{{ object_id }}</div></div></div>
+<section class="card warning-card"><strong>{{ t('restore_behavior') }}</strong> {{ t('restore_behavior_text') }}</section>
+<div class="timeline">
+{% for v in versions %}
+<section class="card version {% if v.deleted %}deleted{% endif %}">
+  <div class="section-head"><div><strong>{{ v.captured_at | localtime }}</strong> · {{ v.object_type }} · {{ v.title or t('no_title') }}</div>{% if v.deleted %}<span class="status bad">{{ t('deleted') }}</span>{% else %}<span class="status good">{{ t('version') }}</span>{% endif %}</div>
+  {% if v.feature %}<details><summary>{{ t('geojson_show') }}</summary><pre>{{ v.feature | tojson(indent=2) }}</pre></details><form method="post" action="/versions/{{ v.id }}/restore" onsubmit="return confirm({{ t('restore_version_confirm') | tojson }});"><button type="submit">{{ t('restore_this_version') }}</button></form>{% endif %}
+</section>
+{% endfor %}
+</div>
+{% endblock %}

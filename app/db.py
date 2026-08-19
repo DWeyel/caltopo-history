@@ -1,7 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Dennis Weyel
+# SPDX-License-Identifier: AGPL-3.0-only
+
 from __future__ import annotations
 
 import gzip
 import json
+import os
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, LargeBinary, String, Text, create_engine, inspect, select, text
@@ -40,6 +45,7 @@ class MapWatch(Base):
     source: Mapped[str] = mapped_column(String(32), default="manual")
     source_rule_id: Mapped[int | None] = mapped_column(ForeignKey("team_rules.id"), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # NULL means: inherit the global interval configured in the UI.
     poll_interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     last_server_ts: Mapped[int] = mapped_column(Integer, default=0)
     poll_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -156,7 +162,10 @@ def _sqlite_migrate() -> None:
             for name, sql_type in additions.items():
                 if name not in columns:
                     conn.execute(text(f"ALTER TABLE audit_log ADD COLUMN {name} {sql_type}"))
-            if "object_versions" in table_names:
+
+            # Backfill object titles for pre-v0.5 restore-audit entries when possible.
+            columns_after = columns | set(additions)
+            if "object_title" in columns_after and "object_versions" in table_names:
                 conn.execute(text(
                     "UPDATE audit_log SET object_title = ("
                     "SELECT ov.title FROM object_versions ov "
@@ -176,7 +185,9 @@ def _sqlite_migrate() -> None:
             for name, sql_type in additions.items():
                 if name not in columns:
                     conn.execute(text(f"ALTER TABLE map_watches ADD COLUMN {name} {sql_type}"))
+            # Older releases used the Map-ID as a fallback title. Clear only those synthetic values.
             conn.execute(text("UPDATE map_watches SET title = '' WHERE title = map_id"))
+            # Existing watches get the same seven-day policy based on their original creation time.
             conn.execute(text(
                 "UPDATE map_watches SET auto_pause_at = datetime(created_at, '+7 days') "
                 "WHERE auto_pause_at IS NULL"
@@ -184,6 +195,7 @@ def _sqlite_migrate() -> None:
 
 
 def _bootstrap_admin() -> None:
+    created = False
     with SessionLocal() as db:
         if db.query(AppUser).count() == 0:
             db.add(AppUser(
@@ -193,6 +205,15 @@ def _bootstrap_admin() -> None:
                 active=True,
             ))
             db.commit()
+            created = True
+
+    # Installers may provide a generated one-time password through a file. Once
+    # the password hash is safely stored in SQLite, remove the plaintext file.
+    if created and settings.initial_admin_password_file and not os.getenv("APP_PASSWORD"):
+        try:
+            Path(settings.initial_admin_password_file).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _bootstrap_settings(default_language: str = "en") -> None:
@@ -219,6 +240,11 @@ def _canonical_snapshot(blob: bytes) -> str:
 
 
 def _cleanup_duplicate_snapshots_once() -> None:
+    """Remove historical consecutive snapshots that contain no state change.
+
+    This is intentionally a one-time v0.4 migration. Future 30-minute quiet snapshots are
+    allowed to duplicate the previous state by design and must not be removed on restart.
+    """
     marker = "snapshot_dedupe_v04_done"
     with SessionLocal() as db:
         if db.get(AppSetting, marker) is not None:
@@ -234,6 +260,7 @@ def _cleanup_duplicate_snapshots_once() -> None:
                 try:
                     state = _canonical_snapshot(snap.state_gz)
                 except Exception:
+                    # Preserve unreadable historical data rather than deleting it.
                     previous_state = None
                     continue
                 if previous_state is not None and state == previous_state:
@@ -246,6 +273,8 @@ def _cleanup_duplicate_snapshots_once() -> None:
 
 
 def init_db() -> None:
+    # Existing releases were German-only. Preserve that language on upgrade, while
+    # fresh v0.8+ installations default to English.
     existing_tables = set(inspect(engine).get_table_names())
     existing_installation = "app_settings" in existing_tables
     Base.metadata.create_all(bind=engine)

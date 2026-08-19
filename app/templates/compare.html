@@ -1,0 +1,19 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+{% extends "base.html" %}
+{% block title %}{{ t('snapshot_comparison') }} · CalTopo History{% endblock %}
+{% block content %}
+<nav class="crumb"><a href="/maps/{{ watch.map_id }}">← {{ watch.title or watch.map_id }}</a></nav>
+<div class="page-head"><div><h1>{{ t('snapshot_comparison') }}</h1><p class="muted">{{ t('changes_a_to_b') }}</p></div></div>
+<div class="grid two">
+<section class="card"><h2>{{ t('snapshot_a') }}</h2><p><strong>#{{ left.id }}</strong></p><p>{{ left.captured_at | localtime }}</p><p class="muted">{{ reason_label(left.reason) }} · {{ t('object_count', count=left.object_count) }}</p><a href="/snapshots/{{ left.id }}">{{ t('snapshot_open') }}</a></section>
+<section class="card"><h2>{{ t('snapshot_b') }}</h2><p><strong>#{{ right.id }}</strong></p><p>{{ right.captured_at | localtime }}</p><p class="muted">{{ reason_label(right.reason) }} · {{ t('object_count', count=right.object_count) }}</p><a href="/snapshots/{{ right.id }}">{{ t('snapshot_open') }}</a></section>
+</div>
+<div class="stats"><div class="stat"><span>{{ t('added')|capitalize }}</span><strong>{{ counts.added }}</strong></div><div class="stat"><span>{{ t('deleted')|capitalize }}</span><strong>{{ counts.removed }}</strong></div><div class="stat"><span>{{ t('changed')|capitalize }}</span><strong>{{ counts.changed }}</strong></div><div class="stat"><span>{{ t('differences_total') }}</span><strong>{{ diff|length }}</strong></div></div>
+<section class="card">
+  <div class="section-head"><h2>{{ t('differences_a_to_b') }}</h2><span class="pill">{{ diff|length }}</span></div>
+  <div class="table-wrap"><table><thead><tr><th>{{ t('status') }}</th><th>{{ t('type') }}</th><th>{{ t('title') }}</th><th>{{ t('object_id') }}</th><th>{{ t('details') }}</th></tr></thead><tbody>
+  {% for d in diff %}<tr><td>{% if d.status == 'added' %}<span class="status good">{{ t('added') }}</span>{% elif d.status == 'removed' %}<span class="status bad">{{ t('deleted') }}</span>{% else %}<span class="status warning">{{ t('changed') }}</span>{% endif %}</td><td>{{ d.object_type }}</td><td>{{ d.title or '—' }}</td><td class="mono small">{{ d.object_id }}</td><td><details><summary>{{ t('geojson_difference') }}</summary><div class="compare-json"><div><strong>A</strong><pre>{{ d.left | tojson(indent=2) if d.left else '—' }}</pre></div><div><strong>B</strong><pre>{{ d.right | tojson(indent=2) if d.right else '—' }}</pre></div></div></details></td></tr>{% else %}<tr><td colspan="5" class="empty">{{ t('snapshots_identical') }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}
