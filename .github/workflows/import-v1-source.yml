@@ -6,6 +6,7 @@ on:
     paths:
       - '.v1-import/**'
       - '.github/workflows/import-v1-source.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
