@@ -1,0 +1,74 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+{% extends "base.html" %}
+{% block title %}{{ t('select_maps') }} · CalTopo History{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+{% endblock %}
+{% block content %}
+{% macro render_map(m, watched) %}
+  <div class="catalog-map {% if m.id in watched %}catalog-map-watched{% endif %}">
+    <label class="catalog-check"><input type="checkbox" name="map_ids" value="{{ m.id }}" aria-label="{{ t('watch_aria', title=m.title) }}" {% if m.id in watched %}checked{% endif %}><span></span></label>
+    <div class="catalog-map-main">
+      <div class="catalog-title-line">
+        <strong>{{ m.title }}</strong>
+        {% if m.same_title_count > 1 %}<span class="status warning" title="{{ t('same_title_title', count=m.same_title_count) }}">{{ t('same_title_badge', count=m.same_title_count) }}</span>{% endif %}
+        {% if m.is_bookmark %}<span class="pill">{{ t('bookmark') }}</span>{% endif %}
+        {% if m.id in watched %}<span class="status good">{{ t('watched') }}</span>{% else %}<span class="status off">{{ t('not_watched') }}</span>{% endif %}
+      </div>
+      <div class="catalog-meta-grid">
+        <div><span>{{ t('map_id') }}</span><strong class="mono">{{ m.id }}</strong></div>
+        <div><span>{{ t('owner') }}</span><strong>{{ m.owner_name or m.account_id or '—' }}</strong>{% if m.owner_name == m.account_id and m.account_id %}<small class="muted">{{ t('owner_name_missing') }}</small>{% endif %}</div>
+        <div><span>{{ t('updated') }}</span><strong>{{ m.updated_at | localtime }}</strong></div>
+        <div><span>{{ t('sharing') }}</span><strong>{{ m.sharing or '—' }}</strong></div>
+      </div>
+      <div class="catalog-map-actions">
+        <button type="button" class="button ghost small-btn preview-toggle" data-map-id="{{ m.id }}" aria-expanded="false" aria-controls="preview-{{ m.id }}">{{ t('preview') }}</button>
+        <a class="small-btn catalog-open-link" href="https://caltopo.com/m/{{ m.id }}" target="_blank" rel="noopener">{{ t('open_in_caltopo') }}</a>
+      </div>
+      <div id="preview-{{ m.id }}" class="catalog-preview" hidden>
+        <div class="catalog-preview-head"><span class="muted small preview-status">{{ t('preview_lazy') }}</span><span class="muted small">{{ t('basemap_osm') }}</span></div>
+        <div id="preview-map-{{ m.id }}" class="catalog-preview-map" role="img" aria-label="{{ t('map_preview_aria', title=m.title) }}"></div>
+      </div>
+    </div>
+  </div>
+{% endmacro %}
+{% macro render_folder(node, watched, level=0) %}
+<details class="catalog-folder" open><summary><span class="folder-icon">▸</span><strong>{{ node.name }}</strong><span class="pill">{{ node.map_count }}</span></summary><div class="catalog-folder-content">{% for m in node.maps %}{{ render_map(m, watched) }}{% endfor %}{% for child in node.children %}{{ render_folder(child, watched, level + 1) }}{% endfor %}</div></details>
+{% endmacro %}
+<nav class="crumb"><a href="/">← {{ t('dashboard') }}</a></nav>
+<div class="page-head"><div><h1>{{ t('available_caltopo_maps') }}</h1><p class="muted">{{ t('picker_intro', team=(team_id or t('team_not_configured'))) }}</p></div><a class="button ghost" href="/maps/picker">{{ t('reload') }}</a></div>
+{% if error %}<div class="alert danger">{{ error }}{% if '403' in error %}<br><strong>{{ t('details') }}:</strong> {{ t('catalog_403_hint') }}{% endif %}</div>{% endif %}
+{% if duplicates %}<div class="alert info"><strong>{{ t('duplicate_maps_title') }}</strong> {{ t('duplicate_maps_text', count=duplicates|length) }}<details class="duplicate-details"><summary>{{ t('show_details') }}</summary><ul>{% for group in duplicates %}<li><strong>{{ group[0].title }}</strong>: {% for m in group %}<span class="mono">{{ m.id }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</li>{% endfor %}</ul></details></div>{% endif %}
+{% if maps %}
+<form method="post" action="/maps/picker"><section class="card"><div class="section-head"><div><h2>{{ t('select_maps') }}</h2><p class="hint">{{ t('picker_help') }}</p></div><button type="submit">{{ t('save_selection') }}</button></div><div class="catalog-tree">{% for root in tree %}<section class="catalog-account"><div class="catalog-account-head"><div><span class="muted small">{{ t('caltopo_account_team') }}</span><h3>{{ root.name }}</h3></div><span class="pill">{{ t('map_count_short', count=root.map_count) }}</span></div>{% for m in root.maps %}{{ render_map(m, watched) }}{% endfor %}{% for child in root.children %}{{ render_folder(child, watched) }}{% endfor %}</section>{% endfor %}</div><div class="sticky-actions"><button type="submit">{{ t('save_selection') }}</button></div></section></form>
+{% elif not error %}<p class="empty">{{ t('no_maps_found') }}</p>{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  if (!window.L) return;
+  const maps = new Map(); const loaded = new Set();
+  const i18n = {preview: {{ t('preview') | tojson }}, previewClose: {{ t('preview_close') | tojson }}, loading: {{ t('preview_loading') | tojson }}, local: {{ t('preview_source_local') | tojson }}, live: {{ t('preview_source_live') | tojson }}, liveUnavailable: {{ t('preview_live_unavailable') | tojson }}, unavailable: {{ t('preview_unavailable', error='{error}') | tojson }}, failed: {{ t('preview_load_failed') | tojson }}, object: {{ t('object') | tojson }}, objects: {{ t('objects') | tojson }}};
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  async function loadPreview(button) {
+    const mapId = button.dataset.mapId; const panel = document.getElementById(`preview-${mapId}`); const mapEl = document.getElementById(`preview-map-${mapId}`); const status = panel?.querySelector('.preview-status'); if (!panel || !mapEl) return;
+    if (!panel.hidden) { panel.hidden = true; button.setAttribute('aria-expanded','false'); button.textContent=i18n.preview; return; }
+    panel.hidden=false; button.setAttribute('aria-expanded','true'); button.textContent=i18n.previewClose;
+    if (loaded.has(mapId)) { setTimeout(() => maps.get(mapId)?.invalidateSize(),0); return; }
+    if (status) status.textContent=i18n.loading; button.disabled=true;
+    try {
+      const response=await fetch(`/api/maps/${encodeURIComponent(mapId)}/preview`,{headers:{'Accept':'application/json'}}); const data=await response.json().catch(()=>({})); if(!response.ok||!data.ok) throw new Error(data.detail||`HTTP ${response.status}`);
+      const leafletMap=L.map(mapEl,{zoomControl:true}); L.tileLayer({{ settings.map_tile_url | tojson }},{maxZoom:{{ settings.map_tile_max_zoom }},attribution:{{ settings.map_tile_attribution | tojson }}}).addTo(leafletMap);
+      const layer=L.geoJSON(data.state||{type:'FeatureCollection',features:[]},{onEachFeature:(feature,lyr)=>{const props=feature.properties||{}; const title=escapeHtml(props.title||i18n.object); const type=escapeHtml(props.class||feature.geometry?.type||''); lyr.bindPopup(`<strong>${title}</strong>${type?`<br>${type}`:''}`);}}).addTo(leafletMap);
+      maps.set(mapId,leafletMap); loaded.add(mapId); const featureCount=Array.isArray(data.state?.features)?data.state.features.length:0;
+      if(featureCount>0){try{const bounds=layer.getBounds(); if(bounds&&bounds.isValid()) leafletMap.fitBounds(bounds,{padding:[24,24],maxZoom:16}); else leafletMap.setView([50.1,8.7],6);}catch(_){leafletMap.setView([50.1,8.7],6);}} else leafletMap.setView([50.1,8.7],6);
+      if(status){const source=data.source==='local'?i18n.local:i18n.live; status.textContent=`${featureCount} ${i18n.objects} · ${source}`; if(data.warning) status.textContent+=` · ${i18n.liveUnavailable}`;}
+      setTimeout(()=>leafletMap.invalidateSize(),0);
+    } catch(error) { if(status) status.textContent=i18n.unavailable.replace('{error}',error.message||error); mapEl.innerHTML=`<div class="catalog-preview-error">${i18n.failed}</div>`; } finally { button.disabled=false; }
+  }
+  document.addEventListener('click',(event)=>{const button=event.target.closest('.preview-toggle'); if(!button)return; event.preventDefault(); loadPreview(button);});
+})();
+</script>
+{% endblock %}
