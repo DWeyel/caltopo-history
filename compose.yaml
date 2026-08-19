@@ -1,0 +1,34 @@
+services:
+  caltopo-history:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: caltopo-history:0.8
+    container_name: caltopo-history
+    restart: unless-stopped
+    environment:
+      CALTOPO_CREDENTIAL_ID: "${CALTOPO_CREDENTIAL_ID:?Set CALTOPO_CREDENTIAL_ID in .env}"
+      CALTOPO_CREDENTIAL_SECRET: "${CALTOPO_CREDENTIAL_SECRET:?Set CALTOPO_CREDENTIAL_SECRET in .env}"
+      APP_USERNAME: "${APP_USERNAME:-admin}"
+      APP_PASSWORD: "${APP_PASSWORD:?Set APP_PASSWORD in .env}"
+      APP_SECRET_KEY: "${APP_SECRET_KEY:?Set APP_SECRET_KEY in .env}"
+      COOKIE_SECURE: "${COOKIE_SECURE:-true}"
+      POLL_INTERVAL_SECONDS: "${POLL_INTERVAL_SECONDS:-60}"
+      DISCOVERY_INTERVAL_SECONDS: "${DISCOVERY_INTERVAL_SECONDS:-300}"
+      FULL_VERIFY_EVERY: "${FULL_VERIFY_EVERY:-30}"
+      TZ: "${TZ:-Europe/Berlin}"
+      DATABASE_URL: "sqlite:////data/caltopo-history.db"
+      CALTOPO_BASE_URL: "${CALTOPO_BASE_URL:-https://caltopo.com}"
+      APP_PORT: "8765"
+      FORWARDED_ALLOW_IPS: "${FORWARDED_ALLOW_IPS:-*}"
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${HOST_PORT:-8765}:8765"
+    volumes:
+      - "${DATA_VOLUME:-caltopo_history_data}:/data"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    stop_grace_period: 30s
+volumes:
+  caltopo_history_data:
+    name: "${DATA_VOLUME_NAME:-caltopo_history_data}"

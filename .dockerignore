@@ -1,0 +1,14 @@
+.git
+.gitignore
+.pytest_cache
+__pycache__
+*.py[cod]
+*.db
+*.db-*
+*.bak
+.env
+data/
+backups/
+tests/
+deploy/
+README-DEBIAN-ISPConfig.md
