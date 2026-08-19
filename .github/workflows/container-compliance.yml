@@ -1,0 +1,106 @@
+name: Container compliance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'compose.yaml'
+      - 'requirements.txt'
+      - 'app/**'
+      - 'docker/**'
+      - 'support/**'
+      - 'LICENSE'
+      - 'THIRD-PARTY-NOTICES.md'
+      - '.github/workflows/container-compliance.yml'
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'compose.yaml'
+      - 'requirements.txt'
+      - 'app/**'
+      - 'docker/**'
+      - 'support/**'
+      - 'LICENSE'
+      - 'THIRD-PARTY-NOTICES.md'
+      - '.github/workflows/container-compliance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container-compliance:
+    name: Build, SBOM and license scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    env:
+      IMAGE_REF: caltopo-history:compliance-${{ github.sha }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build release-equivalent container image
+        run: docker build --pull --tag "$IMAGE_REF" .
+
+      - name: Create artifact directory
+        run: mkdir -p compliance-artifacts
+
+      - name: Generate SPDX JSON SBOM with Syft
+        uses: anchore/sbom-action@v0.24.0
+        with:
+          image: ${{ env.IMAGE_REF }}
+          format: spdx-json
+          output-file: compliance-artifacts/caltopo-history.spdx.json
+          artifact-name: caltopo-history-sbom.spdx.json
+          upload-artifact: true
+          upload-release-assets: false
+
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.3.1
+        with:
+          version: v0.73.0
+          cache: true
+
+      - name: Scan container licenses (JSON)
+        run: |
+          trivy image \
+            --scanners license \
+            --license-full \
+            --format json \
+            --output compliance-artifacts/trivy-license-report.json \
+            "$IMAGE_REF"
+
+      - name: Scan container licenses (human-readable)
+        run: |
+          trivy image \
+            --scanners license \
+            --license-full \
+            --format table \
+            --output compliance-artifacts/trivy-license-report.txt \
+            "$IMAGE_REF"
+
+      - name: Summarize container license scan
+        if: always()
+        run: |
+          echo '## Container compliance' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Container image built from the current Dockerfile.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- SPDX JSON SBOM generated with Syft.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Full container license scan generated with Trivy.' >> "$GITHUB_STEP_SUMMARY"
+          echo '- Review the uploaded Trivy report before publishing a binary image.' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '> Trivy license risk classifications are review signals, not an automatic license-compatibility ruling. In particular, reciprocal/restricted classifications can be expected for normal OS packages in a Debian-based image.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Trivy license reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: caltopo-history-container-license-reports
+          path: |
+            compliance-artifacts/trivy-license-report.json
+            compliance-artifacts/trivy-license-report.txt
+          if-no-files-found: error
+          retention-days: 30
