@@ -2,200 +2,86 @@
 
 ## Overview
 
-CalTopo History is a self-hosted backup, versioning, recovery, and audit solution for organizations that use CalTopo collaboratively.
+**CalTopo History** is a self-hosted backup, versioning, recovery and audit layer for organizations that use CalTopo collaboratively.
 
-Collaborative operational mapping creates an important recovery problem: an object that is accidentally deleted, overwritten, or modified may be difficult to reconstruct from the live map alone. CalTopo History adds an independent protection layer around the existing CalTopo workflow without requiring users to change how they work in CalTopo.
+It addresses a simple operational risk: when a shared map object is deleted, overwritten or changed accidentally, the previous state should not disappear with it.
 
-## The problem
-
-Operational maps are often edited by multiple users at the same time. During an incident, exercise, or planning process, users may accidentally delete map objects, overwrite existing information, change geometry unintentionally, or need to understand how a map looked at an earlier point in time.
-
-Traditional periodic exports provide some protection, but they create redundant copies, offer limited object-level history, are cumbersome to compare, and do not provide a dedicated restore audit trail.
-
-CalTopo History addresses these limitations.
-
-## Core concept
-
-CalTopo History continuously monitors selected CalTopo maps through the CalTopo API.
-
-Instead of simply creating full backups at fixed intervals, it analyzes the actual map state and records meaningful changes.
+Users continue to work normally in CalTopo while CalTopo History monitors selected maps through the CalTopo API and maintains an independent recovery history.
 
 **Monitor → Detect Changes → Version → Compare → Restore → Audit**
 
-Users continue working normally in CalTopo. CalTopo History operates independently in the background.
-
 ## Change-aware backup
 
-CalTopo History periodically checks monitored maps for changes. A new snapshot is only created when the map state has actually changed.
+CalTopo History polls monitored maps on a configurable schedule but only stores a new snapshot when the actual map state changes. Changes include added or deleted objects as well as edits to existing geometry, titles, descriptions, symbols, colors, folders and other properties.
 
-Changes include:
+Thirty minutes after the last detected change, the application creates one final-state snapshot. It then remains quiet until another change occurs.
 
-- objects being added or deleted
-- objects being restored
-- changes to object geometry
-- changes to titles or descriptions
-- changes to symbols, colors, folder assignments, or other properties
-- other modifications to the object data returned by CalTopo
+## Map discovery and monitoring
 
-This avoids creating large numbers of identical backups.
+Maps can be enrolled by Map ID, selected from the visible CalTopo team catalog, selected in groups, or discovered through name rules. The picker can mirror the team/account and folder hierarchy and display owner, sharing state and update metadata where CalTopo provides it.
 
-### Final-state snapshot
-
-After a change has been detected, monitoring continues normally. If no additional changes occur for 30 minutes, CalTopo History creates one additional final-state snapshot. After that, no further identical snapshots are stored until another change is detected.
-
-This creates a compact, event-oriented history rather than a large collection of repetitive scheduled exports.
-
-## Map monitoring and discovery
-
-Maps can be added to monitoring by selecting one or more available CalTopo maps, entering a Map ID manually, or using naming rules to automatically identify relevant maps.
-
-The available-map interface can mirror the visible CalTopo team/account and folder hierarchy and display metadata such as map title, Map ID, owner, last modification time, sharing information, and monitoring status.
-
-Each map can use either the global monitoring interval or its own interval override.
-
-### Automatic monitoring expiration
-
-Operational maps often only need active protection for a limited period. CalTopo History can automatically pause monitoring seven days after enrollment. The stored history remains available, and manual reactivation starts a new monitoring period.
+Each map can inherit the global polling interval or use its own override. Monitoring automatically pauses after seven days unless reactivated.
 
 ## Map preview
 
-Users can preview a CalTopo map before enabling monitoring.
+Available maps can be previewed on demand before enrollment. Current CalTopo objects are rendered over a configurable Leaflet basemap and the view automatically fits the relevant objects. For monitored maps, the application can fall back to the most recent local state if the live preview cannot be retrieved.
 
-The preview is loaded on demand to avoid unnecessary API requests. It displays the current geographic objects over an OpenStreetMap basemap and automatically fits the view to the available map objects.
+## Object history and restore
 
-For previously monitored maps, the application can fall back to the most recently stored local map state if live CalTopo data is temporarily unavailable.
+Every known object has its own version history and current state. Users can filter objects by title and see whether an object is present, deleted or restored.
 
-## Object history
-
-CalTopo History maintains object-level history in addition to full-map snapshots.
-
-For each known object, users can review its title, type, ID, last detected modification, current existence state, and earlier versions.
-
-Possible states include present, deleted, and restored.
-
-A live title filter helps users locate objects quickly on large operational maps.
-
-## Object-level restore
-
-A deleted or incorrectly modified object can be restored from an earlier version.
-
-Typical use cases include recovering an accidentally deleted marker, restoring a previous polygon geometry, recovering a modified line, or reverting an object to an earlier configuration.
-
-Where possible, CalTopo History creates an additional pre-restore safety snapshot before modifying the live map.
-
-## Point-in-time recovery
-
-In addition to restoring individual objects, users can restore a map to a previous snapshot.
-
-The application compares the selected historical state with the current state and determines which supported objects need to be restored or changed.
-
-This provides a point-in-time recovery capability similar to versioned backup systems.
+Supported historical Marker and Shape versions can be restored individually. A complete snapshot can also be selected for point-in-time recovery of supported object types. Pre-restore safety snapshots reduce the risk of an accidental rollback.
 
 ## Snapshot comparison
 
-Any two snapshots of the same map can be compared.
-
-The comparison identifies added, deleted, modified, and unchanged objects. Changes within existing objects are detected as well, including geometry and property changes.
-
-This makes it possible to understand exactly how an operational map evolved between two points in time.
+Two snapshots can be compared to identify added, removed and changed objects, including changes inside existing geometry and properties.
 
 ## Restore audit
 
-Restore operations are security-relevant actions. CalTopo History therefore maintains a dedicated restore audit log.
-
-Audit entries can include timestamp, username, user role, client IP address, map and object identifiers, object title, restore type, source snapshot or object version, and success or failure status.
-
-Both successful and failed restore attempts can be recorded.
+Restore activity is recorded with timestamp, user, role, client IP, map/object identifiers, object title, restore type, source version and success/failure status.
 
 ## Role-based access control
 
-CalTopo History includes local user management with three roles:
+Three local roles are available:
 
-- **Admin** — full access to system configuration, map management, users, maintenance, history, and restore functions.
-- **User** — operational access to map monitoring, history, and restore functions without full system administration.
-- **View** — primarily read-oriented access with restore capability, without administrative map or system management functions.
+- **Admin** — full system, map, user, maintenance and restore administration.
+- **User** — operational map/history/restore access without full system administration.
+- **View** — primarily read-oriented access with restore capability.
 
-The primary `admin` account is protected against deletion, disabling, and role changes. Its password can only be changed by the `admin` user while logged in as that account.
+The primary `admin` account cannot be deleted, disabled or assigned another role; its password can only be changed by that account itself.
 
-## Maintenance and storage management
+## Maintenance and storage protection
 
-Historical data grows over time, so CalTopo History includes a dedicated maintenance area.
+Administrators can prune old snapshots and object versions, purge archived map histories, remove upgrade database backups and run SQLite `VACUUM`.
 
-Administrators can manage old snapshots, historical object versions, archived map history, application database backups, and SQLite storage optimization.
+Storage use is reported per snapshot, per map and for the overall application. Configurable warning and hard-stop thresholds prevent the backup service from filling the server disk. Backup writes resume automatically after free space recovers.
 
-The application reports storage consumption at several levels, including individual snapshots, per-map history, object history, SQLite database files, upgrade backups, and total application data consumption.
+## User interface
 
-## Disk-space protection
+The web interface includes:
 
-A backup application should never become the reason a server runs out of disk space.
+- dashboard and monitoring status;
+- English and German UI languages, with English as the fresh-install default;
+- light and dark themes;
+- responsive phone/tablet layouts;
+- on-demand map previews;
+- settings, user administration, restore audit and maintenance views.
 
-CalTopo History includes configurable warning and critical free-space thresholds. When the warning level is crossed, administrators receive a visible warning. When the critical level is crossed, new storage-producing backup operations are blocked automatically.
+## Deployment
 
-Backup activity resumes automatically once sufficient free space becomes available again.
+CalTopo History supports:
 
-Potentially storage-intensive maintenance operations are also checked against available disk capacity.
+- **Docker / Docker Compose** with persistent storage, health checks, non-root runtime and read-only root filesystem;
+- **native Debian 12 / ISPConfig** deployment using a Python virtual environment, systemd, SQLite and a reverse proxy.
 
-## Dashboard
+## Open-source model
 
-The dashboard provides a centralized operational overview of monitored maps, monitoring state, recent backups, storage consumption, disk-space warnings, recent restore activity, and system status.
+Starting with v0.9, CalTopo History is licensed under **AGPL-3.0-only**. This keeps the software freely usable and modifiable while requiring operators of modified network-served versions to make the corresponding modified source available to their users.
 
-## Multi-language interface
-
-CalTopo History supports English and German. English is the default language for new installations, and administrators can change the global UI language under Settings.
-
-The localization covers navigation, dashboards, map management, object history, restore workflows, snapshot comparison, user management, audit views, maintenance, and application-generated messages.
-
-## Dark mode and responsive design
-
-The interface supports both light and dark themes and is designed for desktop systems, tablets, and smartphones.
-
-Mobile optimizations include responsive navigation, touch-friendly controls, adaptive forms, responsive map previews, mobile-friendly metadata presentation, and controlled scrolling for large tables.
-
-## Deployment options
-
-CalTopo History can be deployed in two ways:
-
-### Docker
-
-The Docker deployment includes a Dockerfile, Docker Compose configuration, persistent data volume, health checks, environment-based configuration, database backup/import tools, non-root runtime, and a read-only container root filesystem.
-
-### Native Linux
-
-A native Debian deployment is also available using a Python virtual environment, systemd, Uvicorn, SQLite, and an Apache or Nginx reverse proxy.
-
-## Persistent data and health monitoring
-
-CalTopo History stores monitored maps, map metadata, snapshots, object versions, current object state, users, settings, and restore audit information in SQLite.
-
-A dedicated health endpoint can be used by Docker, reverse proxies, and external monitoring platforms.
-
-## Security model
-
-Security-related capabilities include:
-
-- role-based access control
-- hashed local passwords
-- protected administrator account
-- restore auditing
-- pre-restore safety snapshots
-- disk-space protection
-- environment-based CalTopo credentials
-- reverse-proxy and HTTPS deployments
-- non-root container execution
-- read-only container filesystem
-
-CalTopo credentials remain server-side and do not need to be exposed to normal application users.
+The web interface contains a source-code link so operators can point users to the Corresponding Source for the deployed version. Third-party dependency and map-provider licensing is documented separately in `THIRD-PARTY-NOTICES.md`.
 
 ## Operational value
 
-CalTopo History is particularly useful wherever CalTopo maps are collaboratively maintained and operational information must remain recoverable, including emergency response, disaster response, wildfire operations, search and rescue, incident management, field operations, exercises, and operational planning.
+CalTopo History is intended for collaborative operational mapping where recoverability and accountability matter: emergency response, disaster response, wildfire operations, search and rescue, incident management, field operations, exercises and planning.
 
-It adds a recovery and accountability layer without replacing CalTopo itself.
-
-## Summary
-
-CalTopo History turns a live collaborative CalTopo map into a versioned and recoverable operational information source.
-
-**If important map information is deleted, overwritten, or changed accidentally, the previous state does not have to be lost.**
-
-CalTopo History provides the tools to identify what changed, understand when it changed, and restore the required information through an auditable recovery process.
+It does not replace CalTopo. It provides the recovery layer around it.
