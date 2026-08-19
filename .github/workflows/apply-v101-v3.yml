@@ -1,0 +1,69 @@
+name: Apply v1.0.1 patch v3
+
+on:
+  push:
+    branches: [v1.0.1-staging]
+    paths:
+      - '.github/workflows/apply-v101-v3.yml'
+
+permissions:
+  contents: write
+  statuses: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: v1.0.1-staging
+          fetch-depth: 0
+
+      - name: Correct known source markers and apply patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/prepare_v101.py')
+          s = p.read_text()
+          replacements = [
+            (
+              '"        row.value = value\\n\\n\\n\\n"\n    "def effective_credential_id"',
+              '"        row.value = value\\n\\n\\n\\n\\n"\n    "def effective_credential_id"',
+            ),
+            (
+              'Das Full-Verification-Intervall muss zwischen 1 und 10000 Polls liegen.',
+              'Das Vollprüfungsintervall muss zwischen 1 und 10000 Polls liegen.',
+            ),
+          ]
+          for old, new in replacements:
+              if s.count(old) != 1:
+                  raise SystemExit(f'expected one marker, found {s.count(old)}: {old}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          python3 scripts/prepare_v101.py
+          python3 -m compileall -q app tests
+          git diff --check
+
+      - name: Commit prepared source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app tests .env.example compose.yaml Dockerfile deploy README.md README-DOCKER.md README-DEBIAN-ISPConfig.md RELEASE-NOTES-v1.0.1.md
+          git commit -m "Prepare CalTopo History 1.0.1"
+          git push origin HEAD:v1.0.1-staging
+
+      - name: Publish preparation status
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          case "$JOB_STATUS" in success) STATE=success ;; failure) STATE=failure ;; *) STATE=error ;; esac
+          python3 - "$STATE" <<'PY'
+          import json, os, sys, urllib.request
+          state = sys.argv[1]
+          payload = json.dumps({"state":state,"context":"caltopo/prepare-v1.0.1-v3","description":"Prepare CalTopo History 1.0.1","target_url":f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"}).encode()
+          req = urllib.request.Request(f"{os.environ['GITHUB_API_URL']}/repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}",data=payload,method="POST",headers={"Authorization":f"Bearer {os.environ['GH_TOKEN']}","Accept":"application/vnd.github+json","Content-Type":"application/json"})
+          with urllib.request.urlopen(req) as response: print(response.status)
+          PY
