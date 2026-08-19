@@ -1,0 +1,33 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+{% extends "base.html" %}
+{% block title %}Snapshot #{{ snap.id }} · CalTopo History{% endblock %}
+{% block head %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>{% endblock %}
+{% block content %}
+<nav class="crumb"><a href="/maps/{{ snap.map_id }}">← {{ t('map') }}</a></nav>
+<div class="page-head"><div><h1>Snapshot #{{ snap.id }}</h1><p class="muted">{{ snap.captured_at | localtime }} · {{ reason_label(snap.reason) }} · {{ t('object_count', count=snap.object_count) }} · {{ snap.storage_bytes | bytesize }}</p></div><a class="button ghost" href="/snapshots/{{ snap.id }}/geojson">{{ t('geojson_download') }}</a></div>
+<div id="snapshot-map" class="map-preview"></div>
+<section class="card">
+  <div class="section-head"><h2>{{ t('snapshot_deviation') }}</h2><span class="pill">{{ diff|length }}</span></div>
+  <div class="table-wrap"><table><thead><tr><th>{{ t('status') }}</th><th>{{ t('type') }}</th><th>{{ t('title') }}</th><th>{{ t('object_id') }}</th></tr></thead><tbody>
+  {% for d in diff %}<tr><td><span class="status {% if d.status == 'remove' %}bad{% elif d.status == 'restore' %}warning{% else %}good{% endif %}">{% if d.status == 'remove' %}{{ t('removed') }}{% elif d.status == 'restore' %}{{ t('restored') }}{% else %}{{ t('changed') }}{% endif %}</span></td><td>{{ d.object_type }}</td><td>{{ d.title or '—' }}</td><td class="mono small">{{ d.object_id }}</td></tr>{% else %}<tr><td colspan="4" class="empty">{{ t('no_differences') }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+<section class="card danger-zone">
+  <h2>{{ t('restore_map_to_time') }}</h2>
+  <p>{{ t('restore_map_explanation') }}</p>
+  <form method="post" action="/snapshots/{{ snap.id }}/restore" class="stack" onsubmit="return confirm({{ t('rollback_confirm') | tojson }});">
+    <label>{{ t('confirm_exactly') }} <code>RESTORE {{ snap.map_id }}</code><input name="confirmation" autocomplete="off" required></label>
+    <button class="danger-button" type="submit">{{ t('run_rollback') }}</button>
+  </form>
+</section>
+<script>
+const data = {{ state | tojson }};
+const fallbackObject = {{ t('object') | tojson }};
+const map = L.map('snapshot-map');
+L.tileLayer({{ settings.map_tile_url | tojson }}, {maxZoom: {{ settings.map_tile_max_zoom }}, attribution: {{ settings.map_tile_attribution | tojson }}}).addTo(map);
+const layer = L.geoJSON(data, {onEachFeature: (feature, lyr) => { const p=feature.properties||{}; lyr.bindPopup(`<strong>${String(p.title||fallbackObject).replace(/[&<>"']/g,'')}</strong><br>${String(p.class||'')}`); }}).addTo(map);
+try { map.fitBounds(layer.getBounds(), {padding:[20,20]}); } catch(e) { map.setView([50.1,8.7], 6); }
+if (!layer.getLayers().length) map.setView([50.1,8.7], 6);
+</script>
+{% endblock %}
