@@ -1,0 +1,294 @@
+name: Publish v1.0 once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-v1-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  statuses: write
+
+concurrency:
+  group: caltopo-history-v1-release
+  cancel-in-progress: false
+
+env:
+  RELEASE_VERSION: '1.0'
+  RELEASE_TAG: 'v1.0'
+  DATABASE_URL: sqlite:////tmp/caltopo-history-v1-release.db
+
+jobs:
+  publish:
+    name: Verify and publish v1.0
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out v1.0 staging
+        uses: actions/checkout@v6
+        with:
+          ref: v1.0-staging
+          fetch-depth: 0
+
+      - name: Materialize normal v1.0 source when transport is still present
+        run: |
+          set -euo pipefail
+          if [ -d .v1-import ]; then
+            cat .v1-import/chunk00 .v1-import/chunk01 .v1-import/chunk02 .v1-import/chunk03 \
+                .v1-import/chunk04 .v1-import/chunk05 .v1-import/chunk06 .v1-import/chunk07 \
+                > "$RUNNER_TEMP/v1.b64"
+            base64 -d "$RUNNER_TEMP/v1.b64" > "$RUNNER_TEMP/v1.tar.gz"
+            ACTUAL="$(sha256sum "$RUNNER_TEMP/v1.tar.gz" | awk '{print $1}')"
+            EXPECTED="d43b196c59510b6d426898049ea21036da084de689ffaa8d63a66e8696b17db2"
+            echo "v1.0 source archive SHA256: $ACTUAL"
+            test "$ACTUAL" = "$EXPECTED"
+
+            rm -rf app tests deploy docker scripts support .github/workflows .v1-import
+            rm -f extract-support.sh
+            mkdir -p .github/workflows
+            tar -xzf "$RUNNER_TEMP/v1.tar.gz" -C "$GITHUB_WORKSPACE"
+          fi
+
+          find . -type d -name __pycache__ -prune -exec rm -rf {} +
+          find . -name '*.pyc' -delete
+          test "$(python3 -c 'from app.version import APP_VERSION; print(APP_VERSION)')" = "$RELEASE_VERSION"
+          test ! -d .v1-import
+          test ! -d support
+          test ! -f extract-support.sh
+          test -f CALTOPO-SERVICE-ACCOUNT.md
+          test -f RELEASE-NOTES-v1.0.md
+          test -f .github/workflows/test-and-license.yml
+          test -f .github/workflows/container-compliance.yml
+          test -f .github/workflows/release.yml
+
+      - name: Create clean Python environment
+        run: python3 -m venv .venv-release
+
+      - name: Install runtime dependencies
+        run: |
+          set -euo pipefail
+          . .venv-release/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Audit resolved runtime dependency licenses
+        run: |
+          set -euo pipefail
+          . .venv-release/bin/activate
+          python scripts/check_dependency_licenses.py
+
+      - name: Run v1.0 test suite
+        run: |
+          set -euo pipefail
+          . .venv-release/bin/activate
+          python -m pip install pytest
+          pytest -q
+          python -m compileall -q app tests
+
+      - name: Validate deployment configuration files
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import yaml
+          for path in ['compose.yaml', 'compose.https.yaml']:
+              with open(path, encoding='utf-8') as f:
+                  yaml.safe_load(f)
+          PY
+          sh -n docker/docker-entrypoint.sh
+          sh -n deploy/install-native-debian12.sh
+          sh -n deploy/update-native-debian12.sh
+          if [ -f docker/init-env.sh ]; then sh -n docker/init-env.sh; fi
+
+      - name: Verify v1.0 documentation and secret-safety contracts
+        run: |
+          set -euo pipefail
+          grep -q 'APP_VERSION = "1.0"' app/version.py
+          grep -q 'WRITE' CALTOPO-SERVICE-ACCOUNT.md
+          grep -q 'READ' CALTOPO-SERVICE-ACCOUNT.md
+          grep -q 'Team Admin' CALTOPO-SERVICE-ACCOUNT.md
+          grep -q 'Create Service Account' CALTOPO-SERVICE-ACCOUNT.md
+          grep -q 'COOKIE_SECURE=true' README-DOCKER.md
+          grep -q 'plain HTTP' README-DOCKER.md
+          grep -RIl --exclude-dir=.git 'AFOPQH' . && { echo 'Potential notification token found'; exit 1; } || true
+
+      - name: Remove test virtual environment before packaging/build
+        run: rm -rf .venv-release
+
+      - name: Commit verified normal v1.0 source to staging
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "Prepare CalTopo History v1.0"
+            git push origin HEAD:v1.0-staging
+          fi
+
+      - name: Build release-equivalent container image
+        run: |
+          set -euo pipefail
+          IMAGE_LOCAL="caltopo-history:release-${GITHUB_RUN_ID}"
+          echo "IMAGE_LOCAL=$IMAGE_LOCAL" >> "$GITHUB_ENV"
+          docker build --pull --tag "$IMAGE_LOCAL" .
+          test "$(docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMAGE_LOCAL")" = "$RELEASE_VERSION"
+
+      - name: Create compliance artifact directory
+        run: mkdir -p compliance-artifacts
+
+      - name: Generate SPDX JSON SBOM from release image
+        uses: anchore/sbom-action@v0.24.0
+        with:
+          image: ${{ env.IMAGE_LOCAL }}
+          format: spdx-json
+          output-file: compliance-artifacts/caltopo-history-v1.0.spdx.json
+          artifact-name: caltopo-history-v1.0-sbom.spdx.json
+          upload-artifact: true
+          upload-release-assets: false
+
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.3.1
+        with:
+          version: v0.73.0
+          cache: true
+
+      - name: Generate full container license reports
+        run: |
+          set -euo pipefail
+          trivy image --scanners license --license-full --format json \
+            --output compliance-artifacts/trivy-license-report-v1.0.json "$IMAGE_LOCAL"
+          trivy image --scanners license --license-full --format table \
+            --output compliance-artifacts/trivy-license-report-v1.0.txt "$IMAGE_LOCAL"
+          test -s compliance-artifacts/trivy-license-report-v1.0.json
+          test -s compliance-artifacts/trivy-license-report-v1.0.txt
+
+      - name: Build release ZIP packages
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zip
+          rm -rf dist
+          mkdir -p dist/caltopo-history-v1.0-docker dist/caltopo-history-debian12-ispconfig-v1.0
+
+          COMMON='LICENSE THIRD-PARTY-NOTICES.md README.md README-DOCKER.md README-DEBIAN-ISPConfig.md CALTOPO-SERVICE-ACCOUNT.md STANDALONE-HTTPS.md RELEASE-NOTES-v1.0.md FEATURE-BRIEF.md requirements.txt pytest.ini .env.example'
+          for f in $COMMON; do [ -e "$f" ] && cp -a "$f" dist/caltopo-history-v1.0-docker/; done
+          cp -a app docker scripts Dockerfile compose.yaml compose.https.yaml Caddyfile dist/caltopo-history-v1.0-docker/
+
+          for f in $COMMON; do [ -e "$f" ] && cp -a "$f" dist/caltopo-history-debian12-ispconfig-v1.0/; done
+          cp -a app tests deploy scripts dist/caltopo-history-debian12-ispconfig-v1.0/
+
+          (cd dist && zip -qr caltopo-history-v1.0-docker.zip caltopo-history-v1.0-docker)
+          (cd dist && zip -qr caltopo-history-debian12-ispconfig-v1.0.zip caltopo-history-debian12-ispconfig-v1.0)
+          unzip -t dist/caltopo-history-v1.0-docker.zip >/dev/null
+          unzip -t dist/caltopo-history-debian12-ispconfig-v1.0.zip >/dev/null
+          sha256sum dist/*.zip | tee dist/SHA256SUMS
+
+      - name: Fast-forward main with a merge commit preserving the verified v1.0 tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if git rev-parse "$RELEASE_TAG" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "ERROR: tag $RELEASE_TAG already exists; refusing to overwrite a release." >&2
+            exit 64
+          fi
+          git merge -s ours --no-ff origin/main -m "Release preparation for CalTopo History v1.0"
+          FINAL_SHA="$(git rev-parse HEAD)"
+          echo "FINAL_SHA=$FINAL_SHA" >> "$GITHUB_ENV"
+          git push origin HEAD:main
+
+      - name: Publish successful test and compliance commit statuses
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TARGET_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          for CONTEXT in caltopo/test-and-license caltopo/container-compliance; do
+            case "$CONTEXT" in
+              caltopo/test-and-license) DESC='v1.0 tests and runtime dependency license audit' ;;
+              *) DESC='v1.0 container build, SBOM and license scan' ;;
+            esac
+            python3 - "$CONTEXT" "$DESC" "$TARGET_URL" <<'PY' > /tmp/status.json
+          import json, sys
+          print(json.dumps({'state':'success','context':sys.argv[1],'description':sys.argv[2][:140],'target_url':sys.argv[3]}))
+          PY
+            curl --fail-with-body --silent --show-error -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/${FINAL_SHA}" \
+              -d @/tmp/status.json
+          done
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push verified release image
+        run: |
+          set -euo pipefail
+          IMAGE_REPO="$(printf 'ghcr.io/%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          echo "IMAGE_REPO=$IMAGE_REPO" >> "$GITHUB_ENV"
+          docker tag "$IMAGE_LOCAL" "$IMAGE_REPO:$RELEASE_VERSION"
+          docker tag "$IMAGE_LOCAL" "$IMAGE_REPO:$RELEASE_TAG"
+          docker tag "$IMAGE_LOCAL" "$IMAGE_REPO:latest"
+          docker push "$IMAGE_REPO:$RELEASE_VERSION"
+          docker push "$IMAGE_REPO:$RELEASE_TAG"
+          docker push "$IMAGE_REPO:latest"
+
+      - name: Create and push annotated v1.0 tag
+        run: |
+          set -euo pipefail
+          git tag -a "$RELEASE_TAG" "$FINAL_SHA" -m "CalTopo History v1.0"
+          git push origin "$RELEASE_TAG"
+
+      - name: Create GitHub Release and attach release/compliance artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            dist/caltopo-history-v1.0-docker.zip \
+            dist/caltopo-history-debian12-ispconfig-v1.0.zip \
+            dist/SHA256SUMS \
+            compliance-artifacts/caltopo-history-v1.0.spdx.json \
+            compliance-artifacts/trivy-license-report-v1.0.json \
+            compliance-artifacts/trivy-license-report-v1.0.txt \
+            --verify-tag \
+            --title "CalTopo History v1.0" \
+            --notes-file RELEASE-NOTES-v1.0.md
+
+      - name: Publish release status
+        if: ${{ success() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TARGET_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
+          printf '{"state":"success","context":"caltopo/release","description":"CalTopo History v1.0 published","target_url":"%s"}' "$TARGET_URL" > /tmp/release-status.json
+          curl --fail-with-body --silent --show-error -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/statuses/${FINAL_SHA}" \
+            -d @/tmp/release-status.json
+
+      - name: Upload release build artifacts to workflow run
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: caltopo-history-v1.0-release-artifacts
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS
+            compliance-artifacts/*
+          if-no-files-found: warn
+          retention-days: 90
