@@ -1,0 +1,70 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+<!doctype html>
+<html lang="{{ language }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}CalTopo History{% endblock %} · v{{ app_version }}</title>
+  <script>
+  (() => {
+    try {
+      const saved = localStorage.getItem('caltopo-theme');
+      const theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.dataset.theme = theme;
+    } catch (_) {}
+  })();
+  </script>
+  <link rel="stylesheet" href="/static/app.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><a href="/">CalTopo History v{{ app_version }}</a><span>Backup & Restore</span></div>
+  {% if current_user %}
+  <div class="top-actions">
+    <a class="top-link" href="/">{{ t('dashboard') }}</a>
+    {% if current_user.role in ['admin','user'] %}<a class="top-link" href="/maps/picker">{{ t('select_maps') }}</a>{% endif %}
+    {% if current_user.role == 'admin' %}<a class="top-link" href="/settings">{{ t('settings') }}</a>{% endif %}
+    <button id="theme-toggle" class="ghost theme-toggle" type="button" aria-label="{{ t('theme_switch') }}" title="{{ t('theme_title') }}"><span class="theme-icon" aria-hidden="true">◐</span><span class="theme-label">Dark</span></button>
+    <span class="user-badge">{{ current_user.username }} · {{ current_user.role|upper }}</span>
+    <form method="post" action="/logout"><button class="ghost" type="submit">{{ t('logout') }}</button></form>
+  </div>
+  {% else %}
+  <div class="top-actions">
+    <button id="theme-toggle" class="ghost theme-toggle" type="button" aria-label="{{ t('theme_switch') }}" title="{{ t('theme_title') }}"><span class="theme-icon" aria-hidden="true">◐</span><span class="theme-label">Dark</span></button>
+  </div>
+  {% endif %}
+</header>
+<main class="container">
+  {% if flash %}<div class="alert {{ flash.level }}">{{ flash.text }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="footer">
+  CalTopo History v{{ app_version }} · {{ t('footer_service') }} · © 2026 Dennis Weyel ·
+  <a href="https://www.gnu.org/licenses/agpl-3.0.html" target="_blank" rel="noopener">AGPL-3.0-only</a> ·
+  {{ 'Ohne Gewährleistung' if language == 'de' else 'No warranty' }} ·
+  <a href="{{ settings.source_code_url }}" target="_blank" rel="noopener">{{ 'Quellcode' if language == 'de' else 'Source code' }}</a>
+</footer>
+<script>
+(() => {
+  const button = document.getElementById('theme-toggle');
+  if (!button) return;
+  const label = button.querySelector('.theme-label');
+  const sync = () => {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    if (label) label.textContent = dark ? 'Light' : 'Dark';
+    button.setAttribute('aria-pressed', dark ? 'true' : 'false');
+  };
+  sync();
+  button.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('caltopo-theme', next); } catch (_) {}
+    sync();
+  });
+})();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
