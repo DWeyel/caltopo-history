@@ -34,6 +34,7 @@ Self-hosted backup, version history, restore and audit web application for colla
 - [Feature brief](FEATURE-BRIEF.md)
 - [Release notes for v0.9](RELEASE-NOTES-v0.9.md)
 - [Third-party notices and license review](THIRD-PARTY-NOTICES.md)
+- [Container compliance / SBOM](CONTAINER-COMPLIANCE.md)
 - [Docker deployment](README-DOCKER.md)
 - [Native Debian 12 / ISPConfig deployment](README-DEBIAN-ISPConfig.md)
 
@@ -43,7 +44,7 @@ CalTopo History is licensed under the **GNU Affero General Public License v3.0 o
 
 Copyright © 2026 Dennis Weyel.
 
-See [LICENSE](LICENSE) for the project licensing notice and the canonical GNU AGPLv3 terms referenced there.
+See [LICENSE](LICENSE) for the GNU AGPLv3 license text.
 
 The web interface exposes the license, no-warranty notice and a **Source code** link. `SOURCE_CODE_URL` must point to the corresponding source for the version actually deployed. This is especially important for modified versions offered to users over a network.
 
@@ -52,6 +53,14 @@ The web interface exposes the license, no-warranty notice and a **Source code** 
 The current Python runtime dependency stack, Leaflet and the default OpenStreetMap basemap integration were reviewed for v0.9. No blocking license incompatibility was identified in the reviewed stack. Third-party components remain under their own licenses; details and operator obligations are documented in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 CI includes a conservative runtime dependency-license check so newly resolved license families require review before being accepted.
+
+## Container SBOM and license scanning
+
+Changes that affect the Docker image trigger a dedicated **Container compliance** GitHub Actions workflow. It builds the current image, generates an **SPDX JSON SBOM with Syft**, performs a **full container license scan with Trivy**, and uploads the reports as workflow artifacts.
+
+The container scan is intentionally review-oriented rather than treating every reciprocal or GPL-family package as a build failure. Debian-based images legitimately contain operating-system components under a variety of licenses; scanner classifications are evidence for review, not by themselves a legal compatibility decision.
+
+Before publishing a binary container image, review and retain the generated SBOM and Trivy license report. See [CONTAINER-COMPLIANCE.md](CONTAINER-COMPLIANCE.md) for the release checklist.
 
 ## Basemap / OpenStreetMap
 
