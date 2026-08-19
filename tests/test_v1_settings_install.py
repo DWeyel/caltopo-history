@@ -62,7 +62,7 @@ def test_v1_installers_generate_application_secret_and_initial_password():
     entrypoint = (root / "docker/docker-entrypoint.sh").read_text()
     native = (root / "deploy/install-native-debian12.sh").read_text()
     compose = (root / "compose.yaml").read_text()
-    assert APP_VERSION == "1.0"
+    assert APP_VERSION == "1.0.1"
     assert "secrets.token_hex(48)" in entrypoint
     assert "secrets.token_urlsafe(24)" in entrypoint
     assert "secrets.token_hex(48)" in native

@@ -1,4 +1,4 @@
-# CalTopo History 1.0 on Debian 12 + ISPConfig 3
+# CalTopo History 1.0.1 on Debian 12 + ISPConfig 3
 
 This deployment does not require Docker.
 
@@ -16,7 +16,7 @@ This deployment does not require Docker.
 ## Fresh installation
 
 ```bash
-cd /root/caltopo-history-debian12-ispconfig-v1.0
+cd /root/caltopo-history-debian12-ispconfig-v1.0.1
 chmod +x deploy/install-native-debian12.sh
 ./deploy/install-native-debian12.sh
 ```
@@ -48,18 +48,20 @@ systemctl start caltopo-history
 
 ### Important: `COOKIE_SECURE` and HTTPS
 
-The recommended/default production value is `COOKIE_SECURE=true`. This requires users to open the application through the HTTPS ISPConfig/Apache site. If somebody opens the backend directly as `http://host:8765` while secure cookies are enabled, valid credentials cannot create a persistent session because browsers do not send Secure cookies over HTTP. 1.0 displays a warning for this mismatch.
+1.0.1 defaults to `COOKIE_SECURE=false`, so the application can be used over HTTP immediately after installation. For an Internet-facing ISPConfig/Apache HTTPS deployment, enable Secure session cookies under **Settings → Session security**, or set `COOKIE_SECURE=true` in `/etc/caltopo-history.env` before a Settings override exists.
 
-Keep port 8765 private and use the HTTPS reverse proxy. Set `COOKIE_SECURE=false` only for temporary trusted local HTTP testing.
+A Settings value overrides the environment fallback and takes effect immediately. Reset the Settings override to return control to `/etc/caltopo-history.env`. If Secure cookies are enabled while the browser is using HTTP, switch to the HTTPS URL for subsequent requests.
+
+Keep port 8765 private whenever a reverse proxy is used. HTTPS remains recommended for Internet-facing deployments.
 
 `POLL_INTERVAL_SECONDS` is only the initial/bootstrap value. The global interval is configured in the web UI; per-map overrides are configured on the respective map page.
 
-A fresh 1.0 installation starts with the UI in **English**. The administrator can select **English** or **Deutsch** under Settings.
+A fresh 1.0.1 installation starts with the UI in **English**. The administrator can select **English** or **Deutsch** under Settings.
 
 ## Upgrade from an earlier release
 
 ```bash
-cd /root/caltopo-history-debian12-ispconfig-v1.0
+cd /root/caltopo-history-debian12-ispconfig-v1.0.1
 chmod +x deploy/update-native-debian12.sh
 ./deploy/update-native-debian12.sh
 ```
@@ -68,12 +70,12 @@ The updater:
 
 1. verifies that the mandatory database copy plus the configured hard free-space reserve fits;
 2. stops `caltopo-history.service`;
-3. creates `/var/lib/caltopo-history/caltopo-history.db.pre-v1.0-YYYYMMDD-HHMMSS.bak`;
+3. creates `/var/lib/caltopo-history/caltopo-history.db.pre-v1.0.1-YYYYMMDD-HHMMSS.bak`;
 4. replaces application code and Python dependencies;
 5. leaves `/etc/caltopo-history.env` unchanged;
 6. starts the service and checks `http://127.0.0.1:8765/healthz`.
 
-Existing users, maps, snapshots, object versions, settings and audit entries are retained. Because v0.7 was German-only, an upgraded installation starts 1.0 in German unless the administrator changes the new language setting. Fresh installations default to English.
+Existing users, maps, snapshots, object versions, settings and audit entries are retained. Because v0.7 was German-only, an upgraded installation starts 1.0.1 in German unless the administrator changes the new language setting. Fresh installations default to English.
 
 ## Verify after installation/update
 
@@ -85,7 +87,7 @@ curl http://127.0.0.1:8765/healthz
 Expected:
 
 ```json
-{"ok":true,"version":"1.0"}
+{"ok":true,"version":"1.0.1"}
 ```
 
 Logs:
@@ -122,6 +124,7 @@ Open **Settings** for:
 - CalTopo Credential ID/Secret, API URL and root Team ID
 - global backup interval, team discovery interval and full-verification cadence
 - disk-space protection thresholds
+- Secure session-cookie policy (`COOKIE_SECURE`)
 - Users
 - Restore audit
 - Maintenance
@@ -163,6 +166,6 @@ journalctl -u caltopo-history --since today
 
 ## License and public source
 
-CalTopo History v1.0 is licensed under `AGPL-3.0-only`. For modified deployments, set `SOURCE_CODE_URL` in `/etc/caltopo-history.env` to the Corresponding Source for the version actually running.
+CalTopo History v1.0.1 is licensed under `AGPL-3.0-only`. For modified deployments, set `SOURCE_CODE_URL` in `/etc/caltopo-history.env` to the Corresponding Source for the version actually running.
 
 The interactive basemap provider can be changed with `MAP_TILE_URL`, `MAP_TILE_ATTRIBUTION` and `MAP_TILE_MAX_ZOOM`. See `THIRD-PARTY-NOTICES.md` for OpenStreetMap policy and privacy notes.

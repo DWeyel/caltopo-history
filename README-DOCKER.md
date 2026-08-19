@@ -1,6 +1,6 @@
-# CalTopo History 1.0 — Docker deployment
+# CalTopo History 1.0.1 — Docker deployment
 
-This package contains the complete CalTopo History 1.0 application, a Docker image definition and Docker Compose deployment.
+This package contains the complete CalTopo History 1.0.1 application, a Docker image definition and Docker Compose deployment.
 
 ## Included
 
@@ -27,8 +27,8 @@ This package contains the complete CalTopo History 1.0 application, a Docker ima
 ## Fresh installation
 
 ```bash
-unzip caltopo-history-v1.0-docker.zip
-cd caltopo-history-v1.0-docker
+unzip caltopo-history-v1.0.1-docker.zip
+cd caltopo-history-v1.0.1-docker
 cp .env.example .env
 nano .env
 ```
@@ -55,10 +55,10 @@ Build and start from source:
 docker compose up -d --build
 ```
 
-Alternatively, after the 1.0 GitHub Release is published, use the prebuilt GHCR image that passed the release test/SBOM/license workflow:
+Alternatively, after the 1.0.1 GitHub Release is published, use the prebuilt GHCR image that passed the release test/SBOM/license workflow:
 
 ```dotenv
-IMAGE_REF=ghcr.io/dweyel/caltopo-history:1.0
+IMAGE_REF=ghcr.io/dweyel/caltopo-history:1.0.1
 ```
 
 Then:
@@ -86,32 +86,26 @@ curl http://127.0.0.1:8765/healthz
 Expected response:
 
 ```json
-{"ok":true,"version":"1.0"}
+{"ok":true,"version":"1.0.1"}
 ```
 
-A fresh 1.0 database uses **English** as the UI language. CalTopo Credential ID/Secret, Team ID and service defaults can be configured from the Settings UI. See [`CALTOPO-SERVICE-ACCOUNT.md`](CALTOPO-SERVICE-ACCOUNT.md) for CalTopo-side setup and permissions.
+A fresh 1.0.1 database uses **English** as the UI language. CalTopo Credential ID/Secret, Team ID and service defaults can be configured from the Settings UI. See [`CALTOPO-SERVICE-ACCOUNT.md`](CALTOPO-SERVICE-ACCOUNT.md) for CalTopo-side setup and permissions.
 
 By default the web service is published only on `127.0.0.1:8765`. Put Apache, Nginx, Caddy, Traefik or another TLS reverse proxy in front of it. If direct network access is intentional, change `BIND_IP` in `.env`.
 
 ## HTTPS and login cookies — important
 
-**Production deployments must use HTTPS.** The default is:
-
-```dotenv
-COOKIE_SECURE=true
-```
-
-This marks the login session cookie as `Secure`. Browsers **do not send Secure cookies over plain HTTP**. **Login sessions cannot work over plain HTTP when `COOKIE_SECURE=true`.** If you open CalTopo History as `http://host:8765`, the username/password can be correct but the login session cannot persist and you will return to the login page.
-
-1.0 detects this mismatch and displays an explicit warning on the login page instead of silently entering a login loop.
-
-For a temporary local HTTP-only test, and only when the connection is trusted, you may use:
+The 1.0.1 default is:
 
 ```dotenv
 COOKIE_SECURE=false
 ```
 
-**Do not use `COOKIE_SECURE=false` for an Internet-facing deployment.**
+This allows a fresh installation to authenticate over either HTTP or HTTPS. For an Internet-facing HTTPS deployment, enable Secure session cookies under **Settings → Session security**, or set `COOKIE_SECURE=true` in `.env` before a Settings override exists.
+
+A value saved in Settings overrides the `.env` fallback and takes effect immediately. Use the **use deployment environment** option in Settings to remove the override. If Secure cookies are enabled while the browser is using HTTP, the HTTP login session will no longer be usable; switch to the HTTPS URL.
+
+HTTPS is still recommended for Internet-facing deployments. With `COOKIE_SECURE=false`, HTTP transports the session cookie without TLS protection.
 
 ### Option A: existing reverse proxy
 
@@ -184,7 +178,7 @@ docker compose build --pull
 docker compose up -d
 ```
 
-Schema/settings migrations run automatically at application startup. An existing v0.7 installation retains German as its initial 1.0 language so that the upgrade does not unexpectedly switch the UI; an admin can change it afterwards.
+Schema/settings migrations run automatically at application startup. An existing v0.7 installation retains German as its initial 1.0.1 language so that the upgrade does not unexpectedly switch the UI; an admin can change it afterwards.
 
 The persistent volume is not removed by `docker compose down` unless `-v` is explicitly supplied.
 
@@ -267,7 +261,7 @@ The application evaluates the filesystem backing `/data`. Configurable warning a
 
 ## License and source-code link
 
-CalTopo History v1.0 is licensed under `AGPL-3.0-only`. The web UI displays the configured source-code location. The default is the upstream GitHub repository. If you run a modified version, set `SOURCE_CODE_URL` to the Corresponding Source for that deployed version.
+CalTopo History v1.0.1 is licensed under `AGPL-3.0-only`. The web UI displays the configured source-code location. The default is the upstream GitHub repository. If you run a modified version, set `SOURCE_CODE_URL` to the Corresponding Source for that deployed version.
 
 ## Map tile provider
 
