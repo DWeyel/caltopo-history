@@ -11,6 +11,10 @@ Patch release focused on HTTP-first installation behavior and session-cookie con
 - Enabling Secure cookies while using an HTTP URL intentionally makes subsequent HTTP session requests unusable; switch to HTTPS.
 - Updated Docker, Debian/ISPConfig and general documentation for the new default and override behavior.
 
+## Upgrade behavior
+
+Existing deployments keep any explicit `COOKIE_SECURE` value from their deployment environment. If no value or Settings override is present, the new 1.0.1 fallback is `false`. After upgrading, administrators can save an explicit value under **Settings → Session security** or reset the UI override to return control to the deployment environment.
+
 ## Security note
 
 `COOKIE_SECURE=false` improves out-of-box compatibility but does not provide transport protection for the session cookie on plain HTTP. HTTPS with Secure session cookies remains recommended for Internet-facing deployments.
