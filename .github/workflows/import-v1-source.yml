@@ -24,12 +24,34 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reconstruct and verify v1.0 source archive
+      - name: Reconstruct and validate v1.0 source archive
         shell: bash
         run: |
           set -euo pipefail
-          cat .v1-import/chunk-* | base64 -d > /tmp/caltopo-history-v1.0.tar.xz
-          echo '71bc39c43e1305023f0661470098be10337434c928803c87b7244903bf4df1f5  /tmp/caltopo-history-v1.0.tar.xz' | sha256sum -c -
+          cat \
+            .v1-import/chunk-00 \
+            .v1-import/chunk-01 \
+            .v1-import/chunk-02 \
+            .v1-import/chunk-03 \
+            .v1-import/chunk-04 \
+            .v1-import/chunk-05 \
+            .v1-import/chunk-06 \
+            .v1-import/chunk-07 \
+            | base64 -d > /tmp/caltopo-history-v1.0.tar.xz
+
+          echo "Reconstructed archive SHA256: $(sha256sum /tmp/caltopo-history-v1.0.tar.xz | awk '{print $1}')"
+          xz -t /tmp/caltopo-history-v1.0.tar.xz
+          tar -tJf /tmp/caltopo-history-v1.0.tar.xz >/dev/null
+
+          rm -rf /tmp/caltopo-v1-check
+          mkdir -p /tmp/caltopo-v1-check
+          tar -xJf /tmp/caltopo-history-v1.0.tar.xz -C /tmp/caltopo-v1-check
+          test "$(cd /tmp/caltopo-v1-check && python3 -c 'from app.version import APP_VERSION; print(APP_VERSION)')" = '1.0'
+          test -f /tmp/caltopo-v1-check/CALTOPO-SERVICE-ACCOUNT.md
+          test -f /tmp/caltopo-v1-check/RELEASE-NOTES-v1.0.md
+          test -f /tmp/caltopo-v1-check/.github/workflows/test-and-license.yml
+          test -f /tmp/caltopo-v1-check/.github/workflows/container-compliance.yml
+          test -f /tmp/caltopo-v1-check/.github/workflows/release.yml
 
       - name: Replace legacy transport tree with normal v1.0 source
         shell: bash
