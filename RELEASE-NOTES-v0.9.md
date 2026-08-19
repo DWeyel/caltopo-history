@@ -2,7 +2,7 @@
 
 ## Overview
 
-v0.9 prepares CalTopo History for an eventual public open-source release. It does not change the core backup and restore model introduced in earlier versions; the focus is licensing, source availability, dependency transparency and safer third-party map integration.
+v0.9 prepares CalTopo History for an eventual public open-source release. It does not change the core backup and restore model introduced in earlier versions; the focus is licensing, source availability, dependency transparency, container compliance and safer third-party map integration.
 
 ## Licensing
 
@@ -20,6 +20,22 @@ A dependency/license review was completed for the direct Python dependencies, co
 No blocking license incompatibility was identified for the reviewed application stack. Third-party components remain under their own licenses.
 
 A conservative CI license guard was added. Runtime dependencies are resolved in a clean environment and the build fails when a previously unreviewed license family appears.
+
+## Container SBOM and license scan
+
+A new **Container compliance** GitHub Actions workflow provides a release-oriented compliance view of the complete built Docker image.
+
+The workflow:
+
+- builds the current container image from the repository;
+- generates an SPDX JSON SBOM with Anchore Syft;
+- performs a full container license scan with Aqua Security Trivy;
+- uploads machine-readable and human-readable license reports as workflow artifacts;
+- can be triggered automatically by relevant image/source changes or manually.
+
+The Trivy container license report is intentionally review-oriented. Trivy's risk classification is useful for identifying licenses that require attention, but it is not treated as an automatic legal compatibility decision for Debian operating-system packages. The existing application dependency-license guard remains the hard CI gate for newly introduced/unreviewed Python runtime license families.
+
+The public-image release checklist is documented in `CONTAINER-COMPLIANCE.md`.
 
 ## OpenStreetMap tile-service compliance
 
