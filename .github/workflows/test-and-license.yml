@@ -12,6 +12,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Restore imported v0.8 support files
+        run: |
+          tar -xzf support/ui-assets-v0.8.tar.gz
+          tar -xzf support/tests-v0.8.tar.gz
+          git checkout -- app/templates/base.html app/templates/map_picker.html app/templates/snapshot.html
       - name: Create clean virtual environment
         run: python -m venv .venv
       - name: Install runtime dependencies
