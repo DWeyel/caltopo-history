@@ -16,7 +16,9 @@ def test_v10_login_warning_and_standalone_https_files():
     assert "cookie_secure" in login
     assert "request.url.scheme != 'https'" in login
     assert "Login sessions cannot persist" in login
+    assert "COOKIE_SECURE=false" in docker_readme
+    assert "HTTP or HTTPS" in docker_readme
+    assert "Settings → Session security" in docker_readme
     assert "COOKIE_SECURE=true" in docker_readme
-    assert "Login sessions cannot work" in docker_readme
     assert "reverse_proxy caltopo-history:8765" in caddyfile
     assert "443:443" in https_compose
