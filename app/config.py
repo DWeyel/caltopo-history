@@ -55,7 +55,7 @@ class Settings:
     initial_admin_password_file: str = os.getenv("INITIAL_ADMIN_PASSWORD_FILE", "")
     app_secret_key: str = _secret_or_file("APP_SECRET_KEY", "APP_SECRET_KEY_FILE", "change-me-to-a-long-random-string")
     app_secret_key_file: str = os.getenv("APP_SECRET_KEY_FILE", "")
-    cookie_secure: bool = _bool("COOKIE_SECURE", True)
+    cookie_secure: bool = _bool("COOKIE_SECURE", False)
     timezone: str = os.getenv("TZ", "Europe/Berlin")
     source_code_url: str = _text("SOURCE_CODE_URL", "https://github.com/DWeyel/caltopo-history")
     map_tile_url: str = _text("MAP_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png")

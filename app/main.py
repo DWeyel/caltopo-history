@@ -41,6 +41,7 @@ from .services import (
     AUTO_PAUSE_DAYS,
     CALTOPO_BASE_URL_KEY,
     CALTOPO_CREDENTIAL_ID_KEY,
+    COOKIE_SECURE_KEY,
     DISCOVERY_INTERVAL_SECONDS_KEY,
     FULL_VERIFY_EVERY_KEY,
     DISK_HARD_MB_KEY,
@@ -55,8 +56,10 @@ from .services import (
     caltopo_client,
     credential_id_source,
     credential_secret_source,
+    cookie_secure_source,
     discovery_interval_seconds,
     effective_caltopo_base_url,
+    effective_cookie_secure,
     effective_credential_id,
     effective_credential_secret,
     full_verify_every,
@@ -69,6 +72,7 @@ from .services import (
     get_app_setting,
     global_poll_interval_seconds,
     refresh_team_catalog,
+    clear_app_setting,
     clear_credential_secret_override,
     restore_one_version,
     restore_snapshot,
@@ -82,11 +86,48 @@ from .storage_guard import DiskSpaceBlocked
 stop_event = asyncio.Event()
 ROLES = {"admin", "user", "view"}
 LOCAL_TZ = ZoneInfo(settings.timezone)
+SESSION_COOKIE_NAME = "session"
+cookie_secure_runtime = settings.cookie_secure
+
+
+class RuntimeCookieSecureMiddleware:
+    """Apply the effective cookie policy without requiring an application restart."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_cookie_policy(message):
+            if message.get("type") == "http.response.start":
+                headers = list(message.get("headers", []))
+                changed = False
+                prefix = (SESSION_COOKIE_NAME + "=").encode("latin-1")
+                for index, (name, value) in enumerate(headers):
+                    if name.lower() != b"set-cookie" or not value.lower().startswith(prefix):
+                        continue
+                    parts = [part.strip() for part in value.decode("latin-1").split(";")]
+                    parts = [part for part in parts if part.lower() != "secure"]
+                    if cookie_secure_runtime:
+                        parts.append("Secure")
+                    headers[index] = (name, "; ".join(parts).encode("latin-1"))
+                    changed = True
+                if changed:
+                    message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_cookie_policy)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global cookie_secure_runtime
     init_db()
+    with SessionLocal() as db:
+        cookie_secure_runtime = effective_cookie_secure(db)
     task = asyncio.create_task(scheduler_loop(stop_event))
     yield
     stop_event.set()
@@ -97,10 +138,11 @@ app = FastAPI(title=f"CalTopo History v{APP_VERSION}", version=APP_VERSION, life
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.app_secret_key,
-    https_only=settings.cookie_secure,
+    https_only=False,
     same_site="lax",
     max_age=12 * 60 * 60,
 )
+app.add_middleware(RuntimeCookieSecureMiddleware)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
@@ -232,6 +274,7 @@ def ctx(request: Request, **kwargs):
         "request": request,
         "flash": request.session.pop("flash", None),
         "settings": settings,
+        "cookie_secure": cookie_secure_runtime,
         "app_version": APP_VERSION,
         "current_user": getattr(request.state, "user", None),
         "language": language,
@@ -735,7 +778,8 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
             full_verify_every_value=full_verify_every(db),
             app_secret_configured=settings.app_secret_key not in {"", "change-me-to-a-long-random-string"},
             app_secret_source=app_secret_source,
-            cookie_secure=settings.cookie_secure,
+            cookie_secure=effective_cookie_secure(db),
+            cookie_secure_source=cookie_secure_source(db),
             timezone=settings.timezone,
         )
     )
@@ -755,8 +799,12 @@ async def save_settings(
     caltopo_base_url: str = Form("https://caltopo.com"),
     discovery_interval: int = Form(300),
     full_verify_every_value: int = Form(30),
+    cookie_secure: str = Form("false"),
+    clear_cookie_secure: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
+    global cookie_secure_runtime
+
     if global_interval_minutes < 1 or global_interval_minutes > 10080:
         flash_t(request, db, "global_interval_invalid", "danger")
         return RedirectResponse("/settings", status_code=303)
@@ -781,6 +829,9 @@ async def save_settings(
     if full_verify_every_value < 1 or full_verify_every_value > 10000:
         flash_t(request, db, "invalid_full_verify", "danger")
         return RedirectResponse("/settings", status_code=303)
+    if cookie_secure not in {"true", "false"}:
+        flash_t(request, db, "invalid_cookie_secure", "danger")
+        return RedirectResponse("/settings", status_code=303)
 
     ui_language = normalize_language(ui_language)
     set_app_setting(db, GLOBAL_POLL_KEY, str(global_interval_minutes * 60))
@@ -792,6 +843,12 @@ async def save_settings(
     set_app_setting(db, CALTOPO_BASE_URL_KEY, caltopo_base_url)
     set_app_setting(db, DISCOVERY_INTERVAL_SECONDS_KEY, str(discovery_interval))
     set_app_setting(db, FULL_VERIFY_EVERY_KEY, str(full_verify_every_value))
+    if clear_cookie_secure:
+        clear_app_setting(db, COOKIE_SECURE_KEY)
+    else:
+        set_app_setting(db, COOKIE_SECURE_KEY, cookie_secure)
+    db.flush()
+    cookie_secure_runtime = effective_cookie_secure(db)
     if clear_credential_secret:
         clear_credential_secret_override(db)
     elif credential_secret.strip():
@@ -806,7 +863,8 @@ async def save_settings(
             f"credential_secret={'updated' if credential_secret.strip() else ('environment' if clear_credential_secret else 'unchanged')}, "
             f"caltopo_base_url={caltopo_base_url}, discovery_interval={discovery_interval}s, "
             f"full_verify_every={full_verify_every_value}, disk_warning_mb={disk_warning_mb}, "
-            f"disk_hard_mb={disk_hard_mb}, ui_language={ui_language}"
+            f"disk_hard_mb={disk_hard_mb}, ui_language={ui_language}, "
+            f"cookie_secure={'environment' if clear_cookie_secure else cookie_secure}"
         ),
         actor_username=request.state.user.username, actor_role=request.state.user.role, client_ip=client_ip(request),
     )

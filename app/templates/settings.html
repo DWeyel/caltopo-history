@@ -49,6 +49,20 @@
     </fieldset>
 
     <fieldset class="settings-fieldset">
+      <legend>{{ t('session_security') }}</legend>
+      <label>{{ t('cookie_secure_status') }}
+        <select name="cookie_secure" required>
+          <option value="false" {% if not cookie_secure %}selected{% endif %}>{{ t('cookie_secure_http_option') }}</option>
+          <option value="true" {% if cookie_secure %}selected{% endif %}>{{ t('cookie_secure_https_option') }}</option>
+        </select>
+      </label>
+      <p class="hint">{{ t('cookie_secure_help') }} · {{ t('configuration_source', source=t('source_settings') if cookie_secure_source == 'settings' else t('source_environment')) }}</p>
+      {% if cookie_secure_source == 'settings' %}
+      <label class="check-row"><input type="checkbox" name="clear_cookie_secure" value="1"> {{ t('cookie_secure_use_environment') }}</label>
+      {% endif %}
+    </fieldset>
+
+    <fieldset class="settings-fieldset">
       <legend>{{ t('language') }}</legend>
       <label>{{ t('language') }}<select name="ui_language" required>{% for code, label in language_options %}<option value="{{ code }}" {% if code == ui_language %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
       <p class="hint">{{ t('language_help') }}</p>
@@ -70,7 +84,7 @@
   <h2>{{ t('deployment_security') }}</h2>
   <dl class="kv-list">
     <div><dt>{{ t('app_secret_key') }}</dt><dd><strong>{{ t('configured_yes') if app_secret_configured else t('configured_no') }}</strong> · {{ t('configuration_source', source=t('source_file') if app_secret_source == 'file' else t('source_environment')) }}</dd></div>
-    <div><dt>{{ t('cookie_secure_status') }}</dt><dd><strong>{{ t('enabled') if cookie_secure else t('disabled') }}</strong></dd></div>
+    <div><dt>{{ t('cookie_secure_status') }}</dt><dd><strong>{{ t('enabled') if cookie_secure else t('disabled') }}</strong> · {{ t('configuration_source', source=t('source_settings') if cookie_secure_source == 'settings' else t('source_environment')) }}</dd></div>
     <div><dt>{{ t('timezone_setting') }}</dt><dd><code>{{ timezone }}</code></dd></div>
   </dl>
   <p class="hint">{{ t('app_secret_help') }}</p>

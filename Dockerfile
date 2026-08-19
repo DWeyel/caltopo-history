@@ -3,7 +3,7 @@
 FROM python:3.11-slim-bookworm
 
 LABEL org.opencontainers.image.title="CalTopo History" \
-      org.opencontainers.image.version="1.0" \
+      org.opencontainers.image.version="1.0.1" \
       org.opencontainers.image.source="https://github.com/DWeyel/caltopo-history" \
       org.opencontainers.image.licenses="AGPL-3.0-only"
 

@@ -43,6 +43,7 @@ CALTOPO_CREDENTIAL_SECRET_KEY = "caltopo_credential_secret"
 CALTOPO_BASE_URL_KEY = "caltopo_base_url"
 DISCOVERY_INTERVAL_SECONDS_KEY = "discovery_interval_seconds"
 FULL_VERIFY_EVERY_KEY = "full_verify_every"
+COOKIE_SECURE_KEY = "cookie_secure"
 DEFAULT_DISK_WARNING_MB = 4096
 DEFAULT_DISK_HARD_MB = 2048
 
@@ -92,6 +93,10 @@ def set_app_setting(db: Session, key: str, value: str) -> None:
         row.value = value
 
 
+def clear_app_setting(db: Session, key: str) -> None:
+    row = db.get(AppSetting, key)
+    if row is not None:
+        db.delete(row)
 
 
 def effective_credential_id(db: Session) -> str:
@@ -142,6 +147,22 @@ def full_verify_every(db: Session) -> int:
         return max(1, int(get_app_setting(db, FULL_VERIFY_EVERY_KEY, str(settings.full_verify_every))))
     except (TypeError, ValueError):
         return max(1, settings.full_verify_every)
+
+
+def effective_cookie_secure(db: Session) -> bool:
+    row = db.get(AppSetting, COOKIE_SECURE_KEY)
+    if row is None:
+        return settings.cookie_secure
+    raw = row.value.strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return settings.cookie_secure
+
+
+def cookie_secure_source(db: Session) -> str:
+    return "settings" if db.get(AppSetting, COOKIE_SECURE_KEY) is not None else "environment"
 
 
 def caltopo_client(db: Session) -> CalTopoClient:

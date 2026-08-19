@@ -1,4 +1,4 @@
-# CalTopo History 1.0
+# CalTopo History 1.0.1
 
 Self-hosted backup, history and restore web application for CalTopo Teams.
 
@@ -26,7 +26,7 @@ Self-hosted backup, history and restore web application for CalTopo Teams.
 - Responsive phone/tablet layout.
 - Light/dark theme toggle stored in the browser.
 - **Multilingual UI: English and German.** The language is selected globally under Settings.
-- **Fresh 1.0 installations default to English.** Upgrades from the previous German-only release remain German until changed by an admin.
+- **Fresh 1.0.1 installations default to English.** Upgrades from the previous German-only release remain German until changed by an admin.
 - All UI timestamps use `Europe/Berlin` and therefore show CET/CEST correctly.
 - Snapshot GeoJSON download.
 - Explicit HTTP/secure-cookie login diagnostics.
@@ -49,7 +49,7 @@ Date formatting follows the selected language while retaining the configured `Eu
 
 ## First-start credentials and application secret
 
-Fresh 1.0 installations automatically generate both the internal `APP_SECRET_KEY` and a strong temporary password for the initial `admin` account when explicit values are not supplied. The application secret is persisted and must be kept stable across upgrades. The temporary administrator password is shown during first-start setup and the plaintext handoff file is deleted after the password has been hashed into SQLite. Change the temporary administrator password after the first login.
+Fresh 1.0.1 installations automatically generate both the internal `APP_SECRET_KEY` and a strong temporary password for the initial `admin` account when explicit values are not supplied. The application secret is persisted and must be kept stable across upgrades. The temporary administrator password is shown during first-start setup and the plaintext handoff file is deleted after the password has been hashed into SQLite. Change the temporary administrator password after the first login.
 
 CalTopo API credentials are separate. They can be supplied through the deployment environment or entered after login under **Settings → Backup & CalTopo → CalTopo connection**. A Credential Secret saved through the UI is encrypted using the installation's `APP_SECRET_KEY` and is never displayed back to the browser.
 
@@ -64,9 +64,10 @@ Administrators can manage the operational CalTopo connection without editing dep
 - global map backup interval;
 - team discovery interval;
 - periodic full-map verification cadence;
-- UI language and disk-space protection thresholds.
+- UI language and disk-space protection thresholds;
+- Secure session-cookie policy (`COOKIE_SECURE`), with immediate runtime effect.
 
-`APP_SECRET_KEY`, `COOKIE_SECURE` and the application timezone remain deployment-level settings. Settings shows their status/current value where appropriate, but changing them requires updating the deployment environment/secret file and restarting the application.
+`APP_SECRET_KEY` and the application timezone remain deployment-level settings. `COOKIE_SECURE` can be changed in Settings; a saved UI value overrides the deployment environment until the override is reset.
 
 ## Storage / maintenance semantics
 
@@ -118,12 +119,13 @@ Opening a map preview causes the browser to request map tiles from the configure
 CalTopo History is an independent project and is not affiliated with or endorsed by CalTopo or SARTopo.
 
 
-## HTTPS / secure-cookie warning
+## HTTPS / secure-cookie behavior
 
-CalTopo History defaults to `COOKIE_SECURE=true`. This is the correct production setting, but it **requires the browser-facing URL to use HTTPS**. If the application is opened over plain HTTP while secure cookies are enabled, correct credentials cannot produce a persistent login session because browsers do not send Secure cookies over HTTP. 1.0 shows an explicit warning in that situation.
+CalTopo History 1.0.1 defaults to `COOKIE_SECURE=false`, so a fresh installation can be used over HTTP immediately. This is convenient for local, LAN and reverse-proxy setup before TLS is configured.
 
-Use HTTPS for production. Set `COOKIE_SECURE=false` only for a temporary trusted local/test HTTP deployment.
+For an HTTPS deployment, enable **Settings → Session security → Secure session cookie** (or set `COOKIE_SECURE=true` in the deployment environment before a Settings override exists). When enabled, browsers will send the session cookie only over HTTPS. The Settings change takes effect immediately and can be reset to the deployment-environment value.
 
+HTTPS remains recommended for Internet-facing deployments because `COOKIE_SECURE=false` does not protect the session cookie from being sent over an unencrypted HTTP connection.
 
 ## Container compliance
 
