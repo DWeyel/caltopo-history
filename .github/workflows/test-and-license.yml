@@ -1,0 +1,33 @@
+name: Test and license audit
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Create clean virtual environment
+        run: python -m venv .venv
+      - name: Install runtime dependencies
+        run: |
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Audit resolved runtime licenses
+        run: |
+          . .venv/bin/activate
+          python scripts/check_dependency_licenses.py
+      - name: Install test dependency
+        run: |
+          . .venv/bin/activate
+          python -m pip install pytest
+      - name: Run tests
+        run: |
+          . .venv/bin/activate
+          pytest -q
