@@ -40,6 +40,7 @@ jobs:
             | base64 -d > /tmp/caltopo-history-v1.0.tar.xz
 
           echo "Reconstructed archive SHA256: $(sha256sum /tmp/caltopo-history-v1.0.tar.xz | awk '{print $1}')"
+          test "$(sha256sum /tmp/caltopo-history-v1.0.tar.xz | awk '{print $1}')" = '71bc39c43e1305023f0661470098be10337434c928803c87b7244903bf4df1f5'
           xz -t /tmp/caltopo-history-v1.0.tar.xz
           tar -tJf /tmp/caltopo-history-v1.0.tar.xz >/dev/null
 
@@ -57,20 +58,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name .v1-import -exec rm -rf -- {} +
-          tar -xJf /tmp/caltopo-history-v1.0.tar.xz -C .
-          rm -rf .v1-import
+
+          # Keep .git, the temporary import chunks, and the existing workflow
+          # directory. The GITHUB_TOKEN intentionally has no workflows scope,
+          # so final workflow files are applied separately after this import.
+          find . -mindepth 1 -maxdepth 1 \
+            ! -name .git \
+            ! -name .v1-import \
+            ! -name .github \
+            -exec rm -rf -- {} +
+
+          mkdir -p .github
+          find .github -mindepth 1 -maxdepth 1 ! -name workflows -exec rm -rf -- {} +
+
+          tar -C /tmp/caltopo-v1-check \
+            --exclude='./.github/workflows' \
+            -cf - . | tar -xf - -C .
+
           test "$(python3 -c 'from app.version import APP_VERSION; print(APP_VERSION)')" = '1.0'
           test ! -d support
           test ! -d app/_payload
           python3 -m compileall -q app
 
-      - name: Commit v1.0 source
+      - name: Commit normal v1.0 source
         shell: bash
         run: |
           set -euo pipefail
           git add -A
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Prepare CalTopo History 1.0'
+          git commit -m 'Prepare CalTopo History 1.0 source'
           git push origin HEAD:v1.0-staging
