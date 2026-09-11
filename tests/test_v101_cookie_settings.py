@@ -24,7 +24,7 @@ def make_db():
 
 
 def test_v101_cookie_secure_default_and_settings_override():
-    assert APP_VERSION == "1.0.1"
+    assert APP_VERSION == "1.1.0"
     db = make_db()
     assert effective_cookie_secure(db) is False
     assert cookie_secure_source(db) == "environment"

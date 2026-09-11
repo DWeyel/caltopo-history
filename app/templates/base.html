@@ -24,6 +24,7 @@
   {% if current_user %}
   <div class="top-actions">
     <a class="top-link" href="/">{{ t('dashboard') }}</a>
+    <a class="top-link" href="/archives">{{ t('archived_maps') }}</a>
     {% if current_user.role in ['admin','user'] %}<a class="top-link" href="/maps/picker">{{ t('select_maps') }}</a>{% endif %}
     {% if current_user.role == 'admin' %}<a class="top-link" href="/settings">{{ t('settings') }}</a>{% endif %}
     <button id="theme-toggle" class="ghost theme-toggle" type="button" aria-label="{{ t('theme_switch') }}" title="{{ t('theme_title') }}"><span class="theme-icon" aria-hidden="true">◐</span><span class="theme-label">Dark</span></button>

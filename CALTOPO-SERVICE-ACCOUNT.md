@@ -42,6 +42,8 @@ In practical testing, WRITE has been sufficient for:
 
 CalTopo History does not create or delete entire CalTopo maps and does not change Team membership or map sharing settings, so MANAGE or ADMIN is not required for those functions.
 
+Object restore and snapshot rollback require the original map to exist and be unlocked. WRITE access does not bypass a map lock. Ask a team manager or administrator to unlock the map in CalTopo before retrying. For deleted-map recovery and partial rollback errors, see [Restore limitation](README.md#restore-limitation).
+
 ### Important documentation discrepancy
 
 CalTopo's current supported-API documentation states that `GET /api/v1/acct/{team_id}/since/{timestamp}` requires at least **ADMIN** permission. However, current CalTopo History testing has shown the team catalog endpoint working with a service account at **WRITE** permission.

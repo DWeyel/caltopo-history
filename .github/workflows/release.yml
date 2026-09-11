@@ -7,12 +7,16 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing tag to release (for example v1.0)'
+        description: 'Version tag (for example v1.1.0); a new tag uses the selected branch'
         required: true
 
 permissions:
   contents: write
   packages: write
+
+concurrency:
+  group: caltopo-release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -26,14 +30,28 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ github.ref }}
+
+      - name: Select existing tag or prepare a new version
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo "Invalid version tag"; exit 1; }
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG"; then
+            git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
+            git checkout --detach "$TAG"
+          fi
 
       - name: Resolve release version
         id: version
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
         shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            TAG="${{ inputs.tag }}"
+            TAG="$REQUESTED_TAG"
           else
             TAG="${GITHUB_REF_NAME}"
           fi
@@ -102,6 +120,19 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create version tag after validation
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG"; then
+            git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
+            test "$(git rev-parse "$TAG^{commit}")" = "$(git rev-parse HEAD)"
+          else
+            git tag "$TAG"
+            git push origin "refs/tags/$TAG"
+          fi
 
       - name: Publish scanned image to GHCR
         shell: bash

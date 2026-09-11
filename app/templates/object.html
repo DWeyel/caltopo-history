@@ -6,6 +6,7 @@
 <nav class="crumb"><a href="/maps/{{ map_id }}">← {{ t('map') }}</a></nav>
 <div class="page-head"><div><h1>{{ t('object_history') }}</h1><div class="mono muted">{{ object_id }}</div></div></div>
 <section class="card warning-card"><strong>{{ t('restore_behavior') }}</strong> {{ t('restore_behavior_text') }}</section>
+<p class="hint">{{ t('restore_requirements') }}</p>
 <div class="timeline">
 {% for v in versions %}
 <section class="card version {% if v.deleted %}deleted{% endif %}">

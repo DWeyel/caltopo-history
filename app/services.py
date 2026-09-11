@@ -44,6 +44,7 @@ CALTOPO_BASE_URL_KEY = "caltopo_base_url"
 DISCOVERY_INTERVAL_SECONDS_KEY = "discovery_interval_seconds"
 FULL_VERIFY_EVERY_KEY = "full_verify_every"
 COOKIE_SECURE_KEY = "cookie_secure"
+PAUSE_WHEN_LOCKED_KEY = "pause_when_locked"
 DEFAULT_DISK_WARNING_MB = 4096
 DEFAULT_DISK_HARD_MB = 2048
 
@@ -310,6 +311,7 @@ def extract_team_maps(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "updated": updated_ms or None,
             "updated_at": _ms_to_datetime(updated_ms),
             "sharing": str(props.get("sharing") or ""),
+            "locked": props.get("locked") is True,
             "is_bookmark": bool(rel),
         }
         # If CalTopo ever repeats the same map feature in one account response, prefer the newest copy.
@@ -376,8 +378,34 @@ async def refresh_team_catalog(db: Session, team_id: str) -> list[dict[str, Any]
         watch = db.scalar(select(MapWatch).where(MapWatch.map_id == item["id"]))
         if watch and item["title"]:
             watch.title = item["title"]
+        if watch and watch.active and item["locked"] and pause_when_locked(db):
+            try:
+                await pause_locked_watch(db, watch)
+            except Exception as exc:
+                db.rollback()
+                watch.last_error = str(exc)[:2000]
+                add_audit(db, "watch_pause_locked_failed", map_id=watch.map_id,
+                          detail=watch.last_error)
+                db.commit()
     db.commit()
     return maps
+
+
+def pause_when_locked(db: Session) -> bool:
+    return get_app_setting(db, PAUSE_WHEN_LOCKED_KEY, "false") == "true"
+
+
+async def pause_locked_watch(db: Session, watch: MapWatch) -> None:
+    """A confirmed catalog lock pauses monitoring only after a successful full backup."""
+    snap = await backup_watch(db, watch, force_full=True, reason="locked-final")
+    if snap is None:
+        ensure_backup_disk_space(db)
+        create_snapshot(db, watch.map_id, watch.last_server_ts, "locked-final-full")
+    watch.active = False
+    watch.quiet_snapshot_at = utcnow()
+    add_audit(db, "watch_paused_locked", map_id=watch.map_id,
+              detail="Final full snapshot saved; map locked in CalTopo. Manual reactivation required.")
+    db.commit()
 
 
 async def ensure_watch(
@@ -421,6 +449,10 @@ async def backup_watch(
     since = 0 if do_full else watch.last_server_ts
     try:
         payload = await client.get_map(watch.map_id, since)
+        if reason == "locked-final":
+            state = payload.get("state") or payload
+            if not isinstance(state, dict) or not isinstance(state.get("features"), list):
+                raise ValueError("CalTopo did not return a complete map state; monitoring remains active.")
         discovered_title = map_title(payload, watch.map_id)
         if discovered_title and discovered_title != watch.map_id:
             watch.title = discovered_title
@@ -509,7 +541,8 @@ async def discover_rule(db: Session, rule: TeamRule) -> int:
 async def pre_restore_snapshot(db: Session, map_id: str) -> Snapshot | None:
     watch = db.scalar(select(MapWatch).where(MapWatch.map_id == map_id))
     if not watch:
-        watch = await ensure_watch(db, map_id)
+        # Archived history can be restored without enrolling the map again.
+        watch = MapWatch(map_id=map_id, active=False, last_server_ts=0, poll_count=0)
     return await backup_watch(db, watch, force_full=True, reason="pre-restore")
 
 
