@@ -17,7 +17,10 @@ from .config import settings
 
 
 class CalTopoError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, status_code: int | None = None, response_text: str = ""):
+        super().__init__(message)
+        self.status_code = status_code
+        self.response_text = response_text
 
 
 def sign_request(method: str, endpoint: str, expires: int, payload_string: str, credential_secret: str) -> str:
@@ -59,7 +62,12 @@ class CalTopoClient:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
             response = await client.request(method, url, params=query, data=body)
         if response.status_code >= 400:
-            raise CalTopoError(f"CalTopo API {response.status_code}: {response.text[:500]}")
+            text = response.text[:500]
+            raise CalTopoError(
+                f"CalTopo API {response.status_code}: {text}",
+                status_code=response.status_code,
+                response_text=text,
+            )
         if not response.content:
             return {}
         try:
@@ -73,6 +81,10 @@ class CalTopoClient:
 
     async def get_team(self, team_id: str, since: int = 0) -> dict[str, Any]:
         return await self.request("GET", f"/api/v1/acct/{team_id}/since/{since}")
+
+    async def create_map(self, team_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Create a CollaborativeMap using CalTopo's documented Team API."""
+        return await self.request("POST", f"/api/v1/acct/{team_id}/CollaborativeMap", payload)
 
     async def add_object(self, map_id: str, object_type: str, feature: dict[str, Any]) -> dict[str, Any]:
         payload = json.loads(json.dumps(feature))

@@ -42,6 +42,8 @@ class MapWatch(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     map_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     title: Mapped[str] = mapped_column(String(300), default="")
+    team_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    map_properties_gz: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     source: Mapped[str] = mapped_column(String(32), default="manual")
     source_rule_id: Mapped[int | None] = mapped_column(ForeignKey("team_rules.id"), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -80,6 +82,9 @@ class Snapshot(Base):
     server_timestamp: Mapped[int] = mapped_column(Integer, default=0)
     reason: Mapped[str] = mapped_column(String(80), default="scheduled")
     object_count: Mapped[int] = mapped_column(Integer, default=0)
+    map_title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    team_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    map_properties_gz: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     state_gz: Mapped[bytes] = mapped_column(LargeBinary)
 
 
@@ -181,6 +186,8 @@ def _sqlite_migrate() -> None:
                 "last_change_at": "DATETIME",
                 "quiet_snapshot_at": "DATETIME",
                 "auto_pause_at": "DATETIME",
+                "team_id": "VARCHAR(32)",
+                "map_properties_gz": "BLOB",
             }
             for name, sql_type in additions.items():
                 if name not in columns:
@@ -192,6 +199,17 @@ def _sqlite_migrate() -> None:
                 "UPDATE map_watches SET auto_pause_at = datetime(created_at, '+7 days') "
                 "WHERE auto_pause_at IS NULL"
             ))
+
+        if "snapshots" in table_names:
+            columns = {column["name"] for column in inspector.get_columns("snapshots")}
+            additions = {
+                "map_title": "VARCHAR(300)",
+                "team_id": "VARCHAR(32)",
+                "map_properties_gz": "BLOB",
+            }
+            for name, sql_type in additions.items():
+                if name not in columns:
+                    conn.execute(text(f"ALTER TABLE snapshots ADD COLUMN {name} {sql_type}"))
 
 
 def _bootstrap_admin() -> None:
