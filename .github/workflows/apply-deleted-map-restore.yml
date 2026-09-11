@@ -24,8 +24,15 @@ jobs:
           python-version: '3.11'
       - name: Apply patch
         run: python scripts/apply_deleted_map_restore.py
-      - name: Compile
-        run: python -m compileall -q app
+      - name: Normalize and compile
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for name in ['app/services.py']:
+              p = Path(name)
+              p.write_text(p.read_text().rstrip() + '\n')
+          PY
+          python -m compileall -q app
       - name: Commit patched source
         run: |
           git config user.name 'github-actions[bot]'
