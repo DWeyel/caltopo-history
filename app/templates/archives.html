@@ -1,0 +1,13 @@
+{# SPDX-FileCopyrightText: 2026 Dennis Weyel #}
+{# SPDX-License-Identifier: AGPL-3.0-only #}
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ t('archived_maps') }}</h1>
+<p class="hint">{{ t('archive_history_help') }}</p>
+<section class="card">
+  <div class="table-wrap"><table><thead><tr><th>{{ t('map') }}</th><th>{{ t('snapshots') }}</th><th>{{ t('size') }}</th><th></th></tr></thead><tbody>
+  {% for m in maps %}<tr><td><a href="/maps/{{ m.map_id }}">{{ m.title }}</a><div class="mono small">{{ m.map_id }}</div></td><td>{{ m.snapshot_count }}</td><td>{{ m.logical_bytes | bytesize }}</td><td><a href="/maps/{{ m.map_id }}">{{ t('view_restore') }}</a></td></tr>
+  {% else %}<tr><td colspan="4" class="empty">{{ t('no_archived_maps') }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}

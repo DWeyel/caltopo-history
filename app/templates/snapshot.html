@@ -16,6 +16,7 @@
 <section class="card danger-zone">
   <h2>{{ t('restore_map_to_time') }}</h2>
   <p>{{ t('restore_map_explanation') }}</p>
+  <p class="hint">{{ t('restore_requirements') }}</p>
   <form method="post" action="/snapshots/{{ snap.id }}/restore" class="stack" onsubmit="return confirm({{ t('rollback_confirm') | tojson }});">
     <label>{{ t('confirm_exactly') }} <code>RESTORE {{ snap.map_id }}</code><input name="confirmation" autocomplete="off" required></label>
     <button class="danger-button" type="submit">{{ t('run_rollback') }}</button>

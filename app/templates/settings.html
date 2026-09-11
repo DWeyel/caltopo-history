@@ -46,6 +46,8 @@
       </div>
       <p class="hint">{{ t('discovery_interval_help') }}</p>
       <p class="hint">{{ t('full_verify_help') }}</p>
+      <label>{{ t('pause_when_locked') }}<select name="pause_when_locked_value"><option value="false" {% if not pause_when_locked_value %}selected{% endif %}>{{ t('no') }}</option><option value="true" {% if pause_when_locked_value %}selected{% endif %}>{{ t('yes') }}</option></select></label>
+      <p class="hint">{{ t('pause_when_locked_help') }}</p>
     </fieldset>
 
     <fieldset class="settings-fieldset">

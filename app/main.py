@@ -39,6 +39,8 @@ from .maintenance import (
 from .scheduler import scheduler_loop
 from .services import (
     AUTO_PAUSE_DAYS,
+    PAUSE_WHEN_LOCKED_KEY,
+    pause_when_locked,
     CALTOPO_BASE_URL_KEY,
     CALTOPO_CREDENTIAL_ID_KEY,
     COOKIE_SECURE_KEY,
@@ -570,11 +572,25 @@ def set_map_title(request: Request, map_id: str, title: str = Form(...), db: Ses
     return RedirectResponse(f"/maps/{map_id}", status_code=303)
 
 
+def history_watch(db: Session, map_id: str) -> tuple[MapWatch, bool]:
+    watch = db.scalar(select(MapWatch).where(MapWatch.map_id == map_id))
+    if watch is not None:
+        return watch, False
+    stored = map_storage(db, map_id)
+    if not (stored.snapshot_count or stored.version_count or stored.current_count):
+        raise HTTPException(404)
+    return MapWatch(map_id=map_id, title=stored.title, active=False, poll_count=0), True
+
+
+@app.get("/archives", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
+def archives(request: Request, db: Session = Depends(get_db)):
+    maps = [item for item in storage_overview(db).maps if not item.watched]
+    return templates.TemplateResponse(request, "archives.html", ctx(request, maps=maps))
+
+
 @app.get("/maps/{map_id}", response_class=HTMLResponse, dependencies=[Depends(require_auth)])
 def map_detail(request: Request, map_id: str, db: Session = Depends(get_db)):
-    watch = db.scalar(select(MapWatch).where(MapWatch.map_id == map_id))
-    if not watch:
-        raise HTTPException(404)
+    watch, archived = history_watch(db, map_id)
     snaps = db.scalars(select(Snapshot).where(Snapshot.map_id == map_id).order_by(desc(Snapshot.captured_at)).limit(200)).all()
     for snap in snaps:
         snap.storage_bytes = len(snap.state_gz or b"")
@@ -584,7 +600,7 @@ def map_detail(request: Request, map_id: str, db: Session = Depends(get_db)):
     map_storage_info = map_storage(db, map_id)
     return templates.TemplateResponse(
         request, "map.html", ctx(
-            request, watch=watch, snaps=snaps, objects=objects, map_storage=map_storage_info,
+            request, watch=watch, archived=archived, snaps=snaps, objects=objects, map_storage=map_storage_info,
             effective_interval_seconds=effective_interval,
             global_interval_seconds=global_interval,
         )
@@ -599,9 +615,7 @@ def compare_snapshots(
     snapshot_b: int = Query(...),
     db: Session = Depends(get_db),
 ):
-    watch = db.scalar(select(MapWatch).where(MapWatch.map_id == map_id))
-    if not watch:
-        raise HTTPException(404)
+    watch, archived = history_watch(db, map_id)
     left = db.get(Snapshot, snapshot_a)
     right = db.get(Snapshot, snapshot_b)
     if not left or not right or left.map_id != map_id or right.map_id != map_id:
@@ -686,7 +700,7 @@ async def restore_snapshot_route(request: Request, snapshot_id: int, confirmatio
     try:
         stats = await restore_snapshot(db, snap, actor_username=user.username, actor_role=user.role, client_ip=ip)
         flash_t(
-            request, db, "rollback_done", "success" if not stats["errors"] else "warning",
+            request, db, "rollback_incomplete" if stats["errors"] else "rollback_done", "success" if not stats["errors"] else "warning",
             stats=", ".join([
                 f"{tr(db, 'changed')}: {stats.get('changed', 0)}",
                 f"{tr(db, 'restored')}: {stats.get('restored', 0)}",
@@ -697,7 +711,7 @@ async def restore_snapshot_route(request: Request, snapshot_id: int, confirmatio
         )
     except Exception as exc:
         add_audit(
-            db, "restore_snapshot_failed", map_id=snap.map_id, object_title="Gesamte Karte",
+            db, "restore_snapshot_failed", map_id=snap.map_id, object_title="Entire map",
             detail=f"snapshot={snap.id}, error={str(exc)[:1800]}",
             actor_username=user.username, actor_role=user.role, client_ip=ip,
         )
@@ -776,6 +790,7 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
             caltopo_base_url=effective_caltopo_base_url(db),
             discovery_interval=discovery_interval_seconds(db),
             full_verify_every_value=full_verify_every(db),
+            pause_when_locked_value=pause_when_locked(db),
             app_secret_configured=settings.app_secret_key not in {"", "change-me-to-a-long-random-string"},
             app_secret_source=app_secret_source,
             cookie_secure=effective_cookie_secure(db),
@@ -799,6 +814,7 @@ async def save_settings(
     caltopo_base_url: str = Form("https://caltopo.com"),
     discovery_interval: int = Form(300),
     full_verify_every_value: int = Form(30),
+    pause_when_locked_value: str = Form("false"),
     cookie_secure: str = Form("false"),
     clear_cookie_secure: str | None = Form(None),
     db: Session = Depends(get_db),
@@ -835,6 +851,7 @@ async def save_settings(
 
     ui_language = normalize_language(ui_language)
     set_app_setting(db, GLOBAL_POLL_KEY, str(global_interval_minutes * 60))
+    set_app_setting(db, PAUSE_WHEN_LOCKED_KEY, "true" if pause_when_locked_value == "true" else "false")
     set_app_setting(db, TEAM_ID_KEY, team_id)
     set_app_setting(db, DISK_WARNING_MB_KEY, str(disk_warning_mb))
     set_app_setting(db, DISK_HARD_MB_KEY, str(disk_hard_mb))

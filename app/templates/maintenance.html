@@ -67,7 +67,7 @@
   <p class="hint">{{ t('archived_maps_help') }}</p>
   <div class="table-wrap"><table><thead><tr><th>{{ t('map') }}</th><th>{{ t('size') }}</th><th>{{ t('confirmation') }}</th><th></th></tr></thead><tbody>
   {% for m in storage.maps if not m.watched %}<tr>
-    <td><strong>{{ m.title }}</strong><div class="mono small">{{ m.map_id }}</div></td><td>{{ m.logical_bytes | bytesize }}</td>
+    <td><a href="/maps/{{ m.map_id }}"><strong>{{ m.title }}</strong></a><div class="mono small">{{ m.map_id }}</div></td><td>{{ m.logical_bytes | bytesize }}</td>
     <td><form id="purge-{{ loop.index }}" method="post" action="/settings/maintenance/archive/{{ m.map_id }}/purge" onsubmit="return confirm({{ t('delete_archive_confirm', map_id=m.map_id) | tojson }});"><input name="confirmation" placeholder="{{ m.map_id }}" required></form></td>
     <td><button form="purge-{{ loop.index }}" class="small-btn danger-button" type="submit">{{ t('delete_archive') }}</button></td>
   </tr>{% else %}<tr><td colspan="4" class="empty">{{ t('no_archived_maps') }}</td></tr>{% endfor %}

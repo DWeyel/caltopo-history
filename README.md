@@ -1,4 +1,4 @@
-# CalTopo History 1.0.1
+# CalTopo History 1.1.0
 
 Self-hosted backup, history and restore web application for CalTopo Teams.
 
@@ -77,6 +77,12 @@ Snapshot pruning always retains at least the configured number of newest snapsho
 
 Removing a map from monitoring does not delete its stored history. The resulting archive can later be removed explicitly from Maintenance.
 
+### Locked maps and archived history (1.1.0)
+
+Enable **Settings → Backup & CalTopo → Pause monitoring when a map is locked** to stop monitoring finalized maps automatically. It is off by default and requires a configured root Team ID with catalog access. The next successful catalog scan saves a final full snapshot before pausing each locked watch. If the final backup fails, the watch remains active and a later catalog scan retries. Unlock the map and select **Activate** to resume monitoring. Moving a map to another owner or sub-team alone does not pause it.
+
+Use **Archived maps** in the navigation to open history after removing a map from monitoring. You can compare snapshots, download GeoJSON, browse object history and restore supported objects without restarting monitoring. Maintenance also links to each archive. Restore still requires the original CalTopo map to exist, be unlocked and be writable. To resume monitoring, add its Map ID from the dashboard. Retained history remains subject to pruning and explicit purge actions.
+
 ## CalTopo service account and permissions
 
 The recommended service-account permission for the full CalTopo History feature set is **WRITE**. In current testing, WRITE is sufficient for backups, team catalog discovery and Marker/Shape restore operations. A READ-only service account can be used for backup-only operation on explicitly configured readable maps, but restore is unavailable and team catalog/discovery may be unavailable.
@@ -96,6 +102,14 @@ The native deployment remains included. See `README-DEBIAN-ISPConfig.md`.
 ## Restore limitation
 
 The application writes only object classes covered by the implemented CalTopo write API paths: `Marker` and `Shape`. Other object classes remain in backup history but are not written back through undocumented endpoints.
+
+Snapshot rollback restores supported objects **in the original, existing map**. It does not recreate a deleted map, restore map-level settings/sharing, or unlock a map. The original map must be readable, unlocked and writable by the configured CalTopo service account.
+
+- **Deleted map:** rollback first fetches the live map to create a pre-restore snapshot, so an unavailable map fails before object writes. Download the stored snapshot using **GeoJSON download**, create a new map in CalTopo, and import the supported objects. Review the imported data and configure sharing, layers and monitoring for the new Map ID; this is not a complete restoration of the original map or its links. Unsupported objects may require manual recovery.
+- **Locked map:** ask a team manager or administrator to unlock it in CalTopo, then retry. A readable map is not necessarily writable; also check the service account's permissions. CalTopo History does not bypass map locks.
+- **Errors during rollback:** writes are individual operations, not a transaction. Some changes can succeed while others fail. Review the restore audit and current map before retrying; recreated objects may receive new IDs.
+
+This is an application limitation, not a claim that the Team API cannot create maps. The [documented Team API](https://training.caltopo.com/all_users/team-accounts/teamapi) provides `POST /api/v1/acct/{team_id}/CollaborativeMap` for creating a new map (at least UPDATE permission), with Point, LineString and Polygon features. CalTopo History does not currently call that endpoint. The documentation does not promise recreation of a deleted map with its original ID or sharing links. CalTopo describes map locking in its [Team Maps guide](https://training.caltopo.com/all_users/team-accounts/team-maps).
 
 
 ## License

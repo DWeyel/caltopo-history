@@ -13,6 +13,12 @@ SUPPORTED_LANGUAGES = {
 
 TRANSLATIONS: dict[str, dict[str, str]] = {
     "en": {
+        "pause_when_locked": "Pause monitoring when a map is locked",
+        "pause_when_locked_help": "Off by default. Requires a configured root Team ID and access to its team catalog. At the next successful catalog check, locked maps receive a final full snapshot before monitoring pauses. Failed backups are retried. Unlocking does not resume monitoring; reactivate it manually. Ownership changes alone do not pause monitoring.",
+        "archive_history_help": "This map is archived locally and is not monitored. You can browse, compare, download and restore retained history without restarting monitoring. Restoring requires the original CalTopo map to exist, be unlocked and be writable. To monitor again, add its Map ID from the dashboard.",
+        "reason_locked_final_full": "final backup before pausing a locked map",
+        "audit_watch_paused_locked": "Monitoring paused: map locked",
+
         # Common / navigation
         "dashboard": "Dashboard",
         "select_maps": "Select maps",
@@ -220,9 +226,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "snapshots_identical": "Snapshots are identical.",
         "snapshot_deviation": "Differences from the last locally known state",
         "no_differences": "No differences.",
-        "restore_map_to_time": "Restore map to this point in time",
+        "restore_map_to_time": "Roll back objects in the existing map",
         "restore_map_explanation": "The app first creates a fresh pre-restore snapshot. It then updates, recreates or removes supported marker/shape objects. Unsupported object types are skipped and recorded in the audit log.",
         "rollback_confirm": "Run rollback now?",
+        "restore_requirements": "The original CalTopo map must still exist, be unlocked and allow this service account to write. Rollback does not recreate a deleted map or restore map settings/sharing. For a deleted map, download the snapshot GeoJSON and import supported objects into a new map in CalTopo. For a locked map, ask a team manager or admin to unlock it before retrying. Writes are not atomic: some changes may succeed before an error occurs. Review the restore audit before retrying.",
+        "rollback_incomplete": "Rollback finished with errors; some changes may have been applied. Review the restore audit and check that the map is unlocked and writable before retrying: {stats}",
         "confirm_exactly": "Enter exactly to confirm:",
         "run_rollback": "Run rollback",
         "restore_behavior": "Restore behavior:",
@@ -453,6 +461,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "user_deleted": "User {username} deleted.",
     },
     "de": {
+        "pause_when_locked": "Überwachung bei gesperrter Map pausieren",
+        "pause_when_locked_help": "Standardmäßig aus. Erfordert eine konfigurierte Root-Team-ID und Zugriff auf deren Team-Katalog. Beim nächsten erfolgreichen Katalogabruf wird vor dem Pausieren ein vollständiger Abschluss-Snapshot gesperrter Maps gespeichert. Fehlgeschlagene Backups werden erneut versucht. Nach dem Entsperren manuell reaktivieren. Ein Eigentümerwechsel allein pausiert die Überwachung nicht.",
+        "archive_history_help": "Diese Map ist lokal archiviert und wird nicht überwacht. Gespeicherte Historie kann ohne Neustart der Überwachung angesehen, verglichen, heruntergeladen und wiederhergestellt werden. Die ursprüngliche CalTopo-Map muss zum Wiederherstellen existieren, entsperrt und beschreibbar sein. Zum erneuten Überwachen die Map-ID im Dashboard hinzufügen.",
+        "reason_locked_final_full": "Abschluss-Backup vor dem Pausieren einer gesperrten Map",
+        "audit_watch_paused_locked": "Überwachung pausiert: Map gesperrt",
+
         # Common / navigation
         "dashboard": "Dashboard",
         "select_maps": "Karten auswählen",
@@ -660,9 +674,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "snapshots_identical": "Snapshots sind inhaltlich identisch.",
         "snapshot_deviation": "Abweichungen zum letzten lokal bekannten Zustand",
         "no_differences": "Keine Unterschiede.",
-        "restore_map_to_time": "Map auf diesen Zeitpunkt zurücksetzen",
+        "restore_map_to_time": "Objekte in der bestehenden Map zurücksetzen",
         "restore_map_explanation": "Die App erstellt zuerst einen frischen Pre-Restore-Snapshot. Danach werden dokumentiert unterstützte Marker/Shapes geändert, neu angelegt oder entfernt. Andere Objekttypen werden übersprungen und im Audit protokolliert.",
         "rollback_confirm": "Rollback jetzt wirklich ausführen?",
+        "restore_requirements": "Die ursprüngliche CalTopo-Map muss noch existieren, entsperrt sein und Schreibzugriff für das Servicekonto erlauben. Ein Rollback erstellt keine gelöschte Map neu und stellt keine Map-Einstellungen oder Freigaben wieder her. Bei einer gelöschten Map den Snapshot als GeoJSON herunterladen und unterstützte Objekte in eine neue CalTopo-Map importieren. Eine gesperrte Map vor einem erneuten Versuch durch einen Team-Manager oder Admin entsperren lassen. Schreibvorgänge sind nicht atomar: Einige Änderungen können vor einem Fehler erfolgreich sein. Vor einem erneuten Versuch das Restore-Audit prüfen.",
+        "rollback_incomplete": "Rollback mit Fehlern beendet; einige Änderungen wurden möglicherweise angewendet. Vor einem erneuten Versuch das Restore-Audit prüfen und sicherstellen, dass die Map entsperrt und beschreibbar ist: {stats}",
         "confirm_exactly": "Zur Bestätigung exakt eingeben:",
         "run_rollback": "Rollback ausführen",
         "restore_behavior": "Restore-Verhalten:",

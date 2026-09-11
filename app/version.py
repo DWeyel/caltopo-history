@@ -1,4 +1,4 @@
 # SPDX-FileCopyrightText: 2026 Dennis Weyel
 # SPDX-License-Identifier: AGPL-3.0-only
 
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.1.0"
