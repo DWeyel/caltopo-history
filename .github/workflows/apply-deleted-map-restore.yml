@@ -1,0 +1,36 @@
+name: apply-deleted-map-restore
+
+on:
+  push:
+    branches: [v1.0.2-staging]
+    paths:
+      - scripts/apply_deleted_map_restore.py
+      - .github/workflows/apply-deleted-map-restore.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: v1.0.2-staging
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Apply patch
+        run: python scripts/apply_deleted_map_restore.py
+      - name: Compile
+        run: python -m compileall -q app
+      - name: Commit patched source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app RELEASE-NOTES-v1.1.0.md
+          git diff --cached --check
+          git commit -m 'Add deleted-map recovery to CalTopo History 1.1.0'
+          git push origin HEAD:v1.0.2-staging
