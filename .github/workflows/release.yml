@@ -75,6 +75,8 @@ jobs:
           python-version: '3.11'
 
       - name: Install and test release source
+        env:
+          DATABASE_URL: sqlite:////tmp/caltopo-history-release-test.db
         run: |
           python -m venv .venv
           . .venv/bin/activate
