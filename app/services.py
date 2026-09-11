@@ -11,7 +11,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .caltopo import CalTopoClient
+from .caltopo import CalTopoClient, CalTopoError
 from .config import settings
 from .db import AppSetting, AuditLog, MapWatch, Snapshot, TeamRule, utcnow
 from .storage_guard import DiskSpaceBlocked, disk_space_status
@@ -25,8 +25,10 @@ from .history import (
     ingest_full,
     ingest_incremental,
     map_title,
+    pack_json,
     response_timestamp,
     snapshot_state,
+    unpack_json,
 )
 
 
@@ -312,6 +314,7 @@ def extract_team_maps(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "updated_at": _ms_to_datetime(updated_ms),
             "sharing": str(props.get("sharing") or ""),
             "locked": props.get("locked") is True,
+            "map_properties": dict(props),
             "is_bookmark": bool(rel),
         }
         # If CalTopo ever repeats the same map feature in one account response, prefer the newest copy.
@@ -376,8 +379,11 @@ async def refresh_team_catalog(db: Session, team_id: str) -> list[dict[str, Any]
     maps = extract_team_maps(payload)
     for item in maps:
         watch = db.scalar(select(MapWatch).where(MapWatch.map_id == item["id"]))
-        if watch and item["title"]:
-            watch.title = item["title"]
+        if watch:
+            if item["title"]:
+                watch.title = item["title"]
+            watch.team_id = item.get("account_id") or watch.team_id
+            watch.map_properties_gz = pack_json(item.get("map_properties") or {})
         if watch and watch.active and item["locked"] and pause_when_locked(db):
             try:
                 await pause_locked_watch(db, watch)
@@ -415,11 +421,17 @@ async def ensure_watch(
     source_rule_id: int | None = None,
     title: str = "",
     reactivate: bool = False,
+    team_id: str | None = None,
+    map_properties: dict[str, Any] | None = None,
 ) -> MapWatch:
     watch = db.scalar(select(MapWatch).where(MapWatch.map_id == map_id))
     if watch:
         if title:
             watch.title = title
+        if team_id:
+            watch.team_id = team_id
+        if map_properties is not None:
+            watch.map_properties_gz = pack_json(map_properties)
         if reactivate:
             watch.active = True
             watch.auto_pause_at = utcnow() + timedelta(days=AUTO_PAUSE_DAYS)
@@ -430,6 +442,8 @@ async def ensure_watch(
         source=source,
         source_rule_id=source_rule_id,
         active=True,
+        team_id=team_id,
+        map_properties_gz=pack_json(map_properties) if map_properties is not None else None,
         auto_pause_at=utcnow() + timedelta(days=AUTO_PAUSE_DAYS),
     )
     db.add(watch)
@@ -522,7 +536,10 @@ async def discover_rule(db: Session, rule: TeamRule) -> int:
                 existing.title = item["title"]
             if rx.search(item["title"]):
                 # Do not reactivate a map that was automatically or manually paused.
-                await ensure_watch(db, item["id"], "pattern", rule.id, item["title"], reactivate=False)
+                await ensure_watch(
+                    db, item["id"], "pattern", rule.id, item["title"], reactivate=False,
+                    team_id=item.get("account_id"), map_properties=item.get("map_properties"),
+                )
                 count += 1
         rule.last_server_ts = int(payload.get("timestamp") or 0)
         rule.last_scan_at = utcnow()
@@ -595,6 +612,117 @@ async def restore_one_version(
     return action
 
 
+def _created_map_id(payload: dict[str, Any]) -> str:
+    for value in (
+        payload.get("id"), payload.get("mapId"), payload.get("map_id"),
+        (payload.get("map") or {}).get("id") if isinstance(payload.get("map"), dict) else None,
+        (payload.get("feature") or {}).get("id") if isinstance(payload.get("feature"), dict) else None,
+    ):
+        if value:
+            return str(value)
+    return ""
+
+
+def _create_map_properties(snapshot: Snapshot, watch: MapWatch | None) -> tuple[str, str, dict[str, Any]]:
+    team_id = str(snapshot.team_id or (watch.team_id if watch else "") or "").strip()
+    title = str(snapshot.map_title or (watch.title if watch else "") or snapshot.map_id).strip()
+    packed = snapshot.map_properties_gz or (watch.map_properties_gz if watch else None)
+    source = unpack_json(packed) if packed else {}
+    if not isinstance(source, dict):
+        source = {}
+    if not team_id:
+        raise ValueError(
+            "Cannot recreate this deleted map automatically because its owning CalTopo Team ID was not recorded. "
+            "This can affect snapshots created before map metadata capture was available."
+        )
+    properties: dict[str, Any] = {
+        "title": title,
+        "mode": str(source.get("mode") or "cal"),
+        "sharing": str(source.get("sharing") or "SECRET"),
+    }
+    config = source.get("mapConfig") or source.get("config")
+    if config:
+        properties["mapConfig"] = config if isinstance(config, str) else json.dumps(config, separators=(",", ":"))
+    if source.get("description") is not None:
+        properties["description"] = source.get("description")
+    return team_id, title, properties
+
+
+def _create_map_state(snapshot: Snapshot) -> tuple[dict[str, Any], int]:
+    features: list[dict[str, Any]] = []
+    skipped = 0
+    for feature in snapshot_state(snapshot).get("features", []):
+        if feature_type(feature) not in SUPPORTED_WRITE_TYPES:
+            skipped += 1
+            continue
+        geometry_type = str((feature.get("geometry") or {}).get("type") or "")
+        if geometry_type not in {"Point", "LineString", "Polygon"}:
+            skipped += 1
+            continue
+        clean = json.loads(json.dumps(feature))
+        clean.pop("id", None)
+        if isinstance(clean.get("properties"), dict):
+            clean["properties"].pop("class", None)
+        features.append(clean)
+    return {"type": "FeatureCollection", "features": features}, skipped
+
+
+async def _recreate_deleted_map(
+    db: Session,
+    snapshot: Snapshot,
+    client: CalTopoClient,
+    *,
+    actor_username: str | None,
+    actor_role: str | None,
+    client_ip: str | None,
+) -> dict[str, Any]:
+    old_watch = db.scalar(select(MapWatch).where(MapWatch.map_id == snapshot.map_id))
+    team_id, title, properties = _create_map_properties(snapshot, old_watch)
+    state, skipped = _create_map_state(snapshot)
+    result = await client.create_map(team_id, {"properties": properties, "state": state})
+    new_map_id = _created_map_id(result)
+    if not new_map_id:
+        # The documented create endpoint normally returns the new object. Fall back to the
+        # account catalog and select the newest exact title match owned by the destination team.
+        catalog = extract_team_maps(await client.get_team(team_id, 0))
+        matches = [item for item in catalog if item.get("account_id") == team_id and item.get("title") == title]
+        if matches:
+            matches.sort(key=lambda item: int(item.get("updated") or 0), reverse=True)
+            new_map_id = str(matches[0]["id"])
+    if not new_map_id:
+        raise ValueError("CalTopo created the map but did not return a new Map ID, and it could not be resolved from the team catalog.")
+
+    if old_watch is not None:
+        old_watch.active = False
+        replacement = await ensure_watch(
+            db, new_map_id, source="recreated", title=title, reactivate=True,
+            team_id=team_id, map_properties={**(unpack_json(old_watch.map_properties_gz) if old_watch.map_properties_gz else {}), **properties},
+        )
+        replacement.poll_interval_seconds = old_watch.poll_interval_seconds
+
+    stats: dict[str, Any] = {
+        "changed": 0,
+        "restored": len(state["features"]),
+        "removed": 0,
+        "skipped": skipped,
+        "errors": 0,
+        "recreated_map": 1,
+        "new_map_id": new_map_id,
+    }
+    add_audit(
+        db,
+        "restore_snapshot_recreated_map",
+        map_id=snapshot.map_id,
+        object_title="Entire map",
+        detail=f"snapshot={snapshot.id}, new_map_id={new_map_id}, team_id={team_id}, stats={json.dumps(stats, sort_keys=True)}",
+        actor_username=actor_username,
+        actor_role=actor_role,
+        client_ip=client_ip,
+    )
+    db.commit()
+    return stats
+
+
 async def restore_snapshot(
     db: Session,
     snapshot: Snapshot,
@@ -602,15 +730,25 @@ async def restore_snapshot(
     actor_username: str | None = None,
     actor_role: str | None = None,
     client_ip: str | None = None,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     map_id = snapshot.map_id
     client = caltopo_client(db)
+    try:
+        live_payload = await client.get_map(map_id, 0)
+    except CalTopoError as exc:
+        if exc.status_code == 404:
+            return await _recreate_deleted_map(
+                db, snapshot, client,
+                actor_username=actor_username, actor_role=actor_role, client_ip=client_ip,
+            )
+        raise
+
+    # A live map is about to be modified: preserve the current server state first.
     await pre_restore_snapshot(db, map_id)
-    live_payload = await client.get_map(map_id, 0)
     live_state = live_payload.get("state") or live_payload
     target = snapshot_state(snapshot)
     plan = diff_states(target, live_state)
-    stats = {"changed": 0, "restored": 0, "removed": 0, "skipped": 0, "errors": 0}
+    stats: dict[str, Any] = {"changed": 0, "restored": 0, "removed": 0, "skipped": 0, "errors": 0, "error_details": []}
     for item in plan:
         if item.object_type not in SUPPORTED_WRITE_TYPES:
             stats["skipped"] += 1
@@ -627,13 +765,15 @@ async def restore_snapshot(
                 stats["removed"] += 1
         except Exception as exc:
             stats["errors"] += 1
+            detail = str(exc)[:500]
+            stats["error_details"].append(detail)
             add_audit(
                 db,
                 "restore_error",
                 map_id=map_id,
                 object_id=item.object_id,
                 object_title=item.title or None,
-                detail=str(exc)[:2000],
+                detail=detail,
                 actor_username=actor_username,
                 actor_role=actor_role,
                 client_ip=client_ip,

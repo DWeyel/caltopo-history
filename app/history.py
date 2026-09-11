@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
-from .db import CurrentObject, ObjectVersion, Snapshot, utcnow
+from .db import CurrentObject, MapWatch, ObjectVersion, Snapshot, utcnow
 
 
 def pack_json(value: Any) -> bytes:
@@ -112,6 +112,17 @@ def current_state(db: Session, map_id: str) -> dict[str, Any]:
     return {"type": "FeatureCollection", "features": [unpack_json(r.feature_gz) for r in rows]}
 
 
+def _snapshot_metadata(db: Session, map_id: str) -> dict[str, Any]:
+    watch = db.scalar(select(MapWatch).where(MapWatch.map_id == map_id))
+    if watch is None:
+        return {}
+    return {
+        "map_title": watch.title or None,
+        "team_id": watch.team_id or None,
+        "map_properties_gz": watch.map_properties_gz,
+    }
+
+
 def create_snapshot(db: Session, map_id: str, server_ts: int, reason: str) -> Snapshot:
     state = current_state(db, map_id)
     snap = Snapshot(
@@ -120,6 +131,7 @@ def create_snapshot(db: Session, map_id: str, server_ts: int, reason: str) -> Sn
         reason=reason,
         object_count=len(state["features"]),
         state_gz=pack_json(state),
+        **_snapshot_metadata(db, map_id),
     )
     db.add(snap)
     db.flush()
@@ -143,6 +155,7 @@ def create_snapshot_if_changed(db: Session, map_id: str, server_ts: int, reason:
         reason=reason,
         object_count=len(state["features"]),
         state_gz=pack_json(state),
+        **_snapshot_metadata(db, map_id),
     )
     db.add(snap)
     db.flush()

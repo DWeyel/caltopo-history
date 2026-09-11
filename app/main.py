@@ -457,7 +457,10 @@ async def save_picked_maps(request: Request, map_ids: list[str] = Form(default=[
     for map_id in selected:
         before = existing.get(map_id)
         # Preserve a manually paused existing watch. Selecting it means "keep monitored", not "reactivate".
-        await ensure_watch(db, map_id, source="picker", title=by_id[map_id]["title"], reactivate=(before is None))
+        await ensure_watch(
+            db, map_id, source="picker", title=by_id[map_id]["title"], reactivate=(before is None),
+            team_id=by_id[map_id].get("account_id"), map_properties=by_id[map_id].get("map_properties"),
+        )
         if before is None:
             added += 1
 
@@ -699,8 +702,11 @@ async def restore_snapshot_route(request: Request, snapshot_id: int, confirmatio
     ip = client_ip(request)
     try:
         stats = await restore_snapshot(db, snap, actor_username=user.username, actor_role=user.role, client_ip=ip)
+        message_key = "deleted_map_recreated" if stats.get("recreated_map") else ("rollback_incomplete" if stats["errors"] else "rollback_done")
+        level = "warning" if stats["errors"] or stats.get("skipped", 0) else "success"
         flash_t(
-            request, db, "rollback_incomplete" if stats["errors"] else "rollback_done", "success" if not stats["errors"] else "warning",
+            request, db, message_key, level,
+            map_id=stats.get("new_map_id", ""),
             stats=", ".join([
                 f"{tr(db, 'changed')}: {stats.get('changed', 0)}",
                 f"{tr(db, 'restored')}: {stats.get('restored', 0)}",
